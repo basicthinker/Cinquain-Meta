@@ -22,16 +22,34 @@
 /* User space (exchangable) */
 #include <stdlib.h>
 #include <stdio.h>
+#include <inttypes.h>
 
 #define log(...) (fprintf(stderr, __VA_ARGS__))
 
 #define fsnode_malloc() \
     ((struct cinq_fsnode *)malloc(sizeof(struct cinq_fsnode)))
 #define fsnode_mfree(p) (free(p))
-
 #define cinq_free free
 
-/* Private */
+#endif // __KERNEL__
+
+
+#ifndef __KERNEL__
+// Private: those in kernel but not user-space
+
+typedef unsigned int umode_t;
+typedef unsigned int uid_t;
+typedef unsigned int gid_t;
+typedef uint32_t __u32;
+typedef long long loff_t;
+
+struct qstr { // include/linux/dcache.h
+  unsigned int hash;
+  unsigned int len;
+  const unsigned char *name;
+};
+
+typedef struct cinq_inode inode_t;
 
 #endif // __KERNEL__
 

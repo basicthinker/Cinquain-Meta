@@ -25,7 +25,7 @@ static inline int __fsnode_ancestor(struct cinq_fsnode *ancestor,
   return 0;
 }
 
-struct cinq_fsnode *fsnode_alloc(struct cinq_fsnode *parent) {
+struct cinq_fsnode *fsnode_new(struct cinq_fsnode *parent) {
   struct cinq_fsnode *fsnode = fsnode_malloc();
   fsnode->fs_id = fs_id_count++;
   if (parent) {

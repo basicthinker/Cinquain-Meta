@@ -37,21 +37,21 @@ static inline void print_fstree(struct cinq_fsnode *root) {
 
 int main (int argc, const char * argv[])
 {
-  root = fsnode_alloc(NULL);
+  root = fsnode_new(NULL);
   
   // Constructs a basic balanced tree
   const int num_children = 3;
   int i, j;
   for (i = 0; i < num_children; ++i) {
-    struct cinq_fsnode *child = fsnode_alloc(root);
+    struct cinq_fsnode *child = fsnode_new(root);
     for (j = 0; j < num_children; ++j) {
-      fsnode_alloc(child);
+      fsnode_new(child);
     }
   }
   print_fstree(root);
   
   // Moves a subtree
-  struct cinq_fsnode *extra = fsnode_alloc(root);
+  struct cinq_fsnode *extra = fsnode_new(root);
   fsnode_move(root->children, extra); // moves its first child
   print_fstree(root);
   fsnode_move(root, extra); // try invalid operation
