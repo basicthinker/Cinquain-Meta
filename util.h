@@ -51,6 +51,13 @@ struct qstr { // include/linux/dcache.h
 
 typedef struct cinq_inode inode_t;
 
+static inline void * ERR_PTR(long error) { // include/linux/err.h
+  return (void *) error;
+}
+
+#define ENOENT 2 /* No such file or directory */ // include/asm-generic/errno-base.h
+#define ENAMETOOLONG 36 /* File name too long */ // include/asm-generic/errno.h
+
 #endif // __KERNEL__
 
 #endif // CINQUAIN_META_UTIL_H_

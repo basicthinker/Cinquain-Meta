@@ -20,6 +20,18 @@
 #define MAX_FILE_NAME_LEN 256 // max value
 #define MAX_NESTED_LINKS 6
 
+#define HASH_FIND_BY_STR(head, findstr, out, hh) \
+    HASH_FIND(hh, head, findstr, strlen(findstr), out)
+#define HASH_ADD_BY_STR(head, strfield, add, hh) \
+    HASH_ADD(hh, head, strfield, strlen(add->strfield), add)
+#define HASH_FIND_BY_INT(head, findint, out, hh) \
+    HASH_FIND(hh, head, findint, sizeof(int), out)
+#define HASH_ADD_BY_INT(head, intfield, add, hh) \
+    HASH_ADD(hh, head, intfield, sizeof(int), add)
+#define HASH_REMOVE(head, delptr, hh) \
+    HASH_DELETE(hh, head, delptr)
+
+
 #ifndef __KERNEL__
 // supplement of kernel structure to user space
 
@@ -27,6 +39,7 @@ struct dentry {
   inode_t *d_inode;
   struct dentry *parent;
   struct qstr d_name;
+  void *d_fsdata;
   
   // Omits all dcache-related members.
   // User-space implementation should provide independent dentry cache.
@@ -58,15 +71,17 @@ struct nameidata {
 
 struct cinq_fsnode {
   unsigned int fs_id;
-  struct cinq_fsnode *parent;
+  struct cinq_fsnode *fs_parent;
   
   // Using hash table to store children
-  struct cinq_fsnode *children;
-  UT_hash_handle hh;
+  struct cinq_fsnode *fs_children;
+  UT_hash_handle fs_child; // used for parent's children
+  UT_hash_table fs_tag; // used for cinq_inode's tags
+  UT_hash_table fs_member; // used for global file system list
 };
 
 static inline int fsnode_is_root(struct cinq_fsnode *fsnode) {
-  return fsnode->parent == fsnode;
+  return fsnode->fs_parent == fsnode;
 }
 
 /* fsnode.c */
@@ -89,11 +104,6 @@ extern void fsnode_free_all(struct cinq_fsnode *fsnode);
 extern void fsnode_move(struct cinq_fsnode *child,
                         struct cinq_fsnode *new_parent);
 
-
-struct __cinq_tag {
-  unsigned int fs_id;
-  UT_hash_handle hh;
-};
 
 struct cinq_inode {
   umode_t i_mode;
@@ -118,12 +128,13 @@ struct cinq_inode {
   // Cinquain-specific
   char file_name[MAX_FILE_NAME_LEN];
   char file_handle[FILE_HASH_WIDTH];
-  struct __cinq_tag *tags; // hash table of tags
+  struct cinq_fsnode *tags; // hash table of tags
   struct cinq_inode *children; // hash table of children
   
 };
 
 /* inode.c */
+
 extern struct dentry *cinq_lookup(inode_t *dir, struct dentry *dentry,
                                   struct nameidata *nameidata);
 

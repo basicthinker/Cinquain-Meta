@@ -19,7 +19,7 @@ static unsigned int fs_id_count = 0;
 static inline int __fsnode_ancestor(struct cinq_fsnode *ancestor,
                                   struct cinq_fsnode *descendant) {
   while (!fsnode_is_root(descendant)) {
-    descendant = descendant->parent;
+    descendant = descendant->fs_parent;
     if (descendant == ancestor) return 1;
   }
   return 0;
@@ -29,32 +29,32 @@ struct cinq_fsnode *fsnode_new(struct cinq_fsnode *parent) {
   struct cinq_fsnode *fsnode = fsnode_malloc();
   fsnode->fs_id = fs_id_count++;
   if (parent) {
-    fsnode->parent = parent;
-    HASH_ADD_INT(fsnode->parent->children, fs_id, fsnode);
+    fsnode->fs_parent = parent;
+    HASH_ADD_BY_INT(fsnode->fs_parent->fs_children, fs_id, fsnode, fs_child);
   } else {
-    fsnode->parent = fsnode; // denotes root
+    fsnode->fs_parent = fsnode; // denotes root
   }
-  fsnode->children = NULL; // required by uthash
+  fsnode->fs_children = NULL; // required by uthash
   return fsnode;
 }
 
 void fsnode_free(struct cinq_fsnode *fsnode) {
-  if (HASH_COUNT(fsnode->children)) {
+  if (fsnode->fs_children) {
     log("[Error: fsnode_free] failed to delete fsnode %u "
         "who still has children.\n",
         fsnode->fs_id);
     return;
   }
-  if (!fsnode_is_root(fsnode) && fsnode->parent) {
-    HASH_DEL(fsnode->parent->children, fsnode);
+  if (!fsnode_is_root(fsnode) && fsnode->fs_parent) {
+    HASH_REMOVE(fsnode->fs_parent->fs_children, fsnode, fs_child);
   }
   fsnode_mfree(fsnode);
 }
 
 void fsnode_free_all(struct cinq_fsnode *fsnode) {
-  if (fsnode->children) {
+  if (fsnode->fs_children) {
     struct cinq_fsnode *current, *tmp;
-    HASH_ITER(hh, fsnode->children, current, tmp) {
+    HASH_ITER(fs_child, fsnode->fs_children, current, tmp) {
       fsnode_free_all(current);
     }
   }
@@ -66,10 +66,10 @@ void fsnode_move(struct cinq_fsnode *child,
   if (__fsnode_ancestor(child, new_parent)) {
     log("[Error: fsnode_change_parent] change fsnode %u's parent "
         "from %u to %u.\n",
-        child->fs_id, child->parent->fs_id, new_parent->fs_id);
+        child->fs_id, child->fs_parent->fs_id, new_parent->fs_id);
     return;
   }
-  HASH_DEL(child->parent->children, child);
-  child->parent = new_parent; // supposed to be atomic
-  HASH_ADD_INT(new_parent->children, fs_id, child);
+  HASH_REMOVE(child->fs_parent->fs_children, child, fs_child);
+  child->fs_parent = new_parent; // supposed to be atomic
+  HASH_ADD_BY_INT(new_parent->fs_children, fs_id, child, fs_child);
 }

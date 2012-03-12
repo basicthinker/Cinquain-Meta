@@ -26,7 +26,7 @@ static void __print_fstree(const int depth, const int no,
   
   i = 0;
   struct cinq_fsnode *p;
-  for (p = subroot->children; p != NULL; p = p->hh.next) {
+  for (p = subroot->fs_children; p != NULL; p = p->fs_child.next) {
     __print_fstree(depth + 1, ++i, p);
   }
 }
@@ -52,7 +52,7 @@ int main (int argc, const char * argv[])
   
   // Moves a subtree
   struct cinq_fsnode *extra = fsnode_new(root);
-  fsnode_move(root->children, extra); // moves its first child
+  fsnode_move(root->fs_children, extra); // moves its first child
   print_fstree(root);
   fsnode_move(root, extra); // try invalid operation
   
