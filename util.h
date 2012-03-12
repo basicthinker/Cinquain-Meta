@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <inttypes.h>
+#include <string.h>
 
 #define log(...) (fprintf(stderr, __VA_ARGS__))
 

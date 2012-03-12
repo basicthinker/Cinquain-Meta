@@ -17,18 +17,18 @@
 #include "uthash.h"
 
 #define FILE_HASH_WIDTH 16 // bytes
-#define MAX_FILE_NAME_LEN 256 // max value
+#define MAX_NAME_LEN 255 // max value
 #define MAX_NESTED_LINKS 6
 
-#define HASH_FIND_BY_STR(head, findstr, out, hh) \
+#define HASH_FIND_BY_STR(hh, head, findstr, out) \
     HASH_FIND(hh, head, findstr, strlen(findstr), out)
-#define HASH_ADD_BY_STR(head, strfield, add, hh) \
+#define HASH_ADD_BY_STR(hh, head, strfield, add) \
     HASH_ADD(hh, head, strfield, strlen(add->strfield), add)
-#define HASH_FIND_BY_INT(head, findint, out, hh) \
+#define HASH_FIND_BY_INT(hh, head, findint, out) \
     HASH_FIND(hh, head, findint, sizeof(int), out)
-#define HASH_ADD_BY_INT(head, intfield, add, hh) \
+#define HASH_ADD_BY_INT(hh, head, intfield, add) \
     HASH_ADD(hh, head, intfield, sizeof(int), add)
-#define HASH_REMOVE(head, delptr, hh) \
+#define HASH_REMOVE(hh, head, delptr) \
     HASH_DELETE(hh, head, delptr)
 
 
@@ -71,13 +71,14 @@ struct nameidata {
 
 struct cinq_fsnode {
   unsigned int fs_id;
+  char fs_name[MAX_NAME_LEN + 1];
   struct cinq_fsnode *fs_parent;
   
   // Using hash table to store children
   struct cinq_fsnode *fs_children;
   UT_hash_handle fs_child; // used for parent's children
-  UT_hash_table fs_tag; // used for cinq_inode's tags
-  UT_hash_table fs_member; // used for global file system list
+  UT_hash_handle fs_tag; // used for cinq_inode's tags
+  UT_hash_handle fs_member; // used for global file system list
 };
 
 static inline int fsnode_is_root(struct cinq_fsnode *fsnode) {
@@ -93,7 +94,8 @@ static inline int fsnode_is_root(struct cinq_fsnode *fsnode) {
 
 // Creates a fsnode.
 // @parent the fsnode's parent, while NULL indicates a root fsnode.
-extern struct cinq_fsnode *fsnode_new(struct cinq_fsnode *parent);
+extern struct cinq_fsnode *fsnode_new(const char *name,
+                                      struct cinq_fsnode *parent);
 
 // Destroys a single fsnode without children
 extern void fsnode_free(struct cinq_fsnode *fsnode);
@@ -126,7 +128,7 @@ struct cinq_inode {
   __u32 i_generation;
   
   // Cinquain-specific
-  char file_name[MAX_FILE_NAME_LEN];
+  char file_name[MAX_NAME_LEN + 1];
   char file_handle[FILE_HASH_WIDTH];
   struct cinq_fsnode *tags; // hash table of tags
   struct cinq_inode *children; // hash table of children

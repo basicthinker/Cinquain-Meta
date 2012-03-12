@@ -22,7 +22,7 @@ static inline inode_t *__cinq_lookup(inode_t *dir, struct qstr *name,
 //  It is used to pass in target name.     
 struct dentry *cinq_lookup(inode_t *dir, struct dentry *dentry,
                            struct nameidata *nameidata) {
-  if (dentry->d_name.len >= MAX_FILE_NAME_LEN)
+  if (dentry->d_name.len >= MAX_NAME_LEN)
     return ERR_PTR(-ENAMETOOLONG);
   
   inode_t *inode = __cinq_lookup(dir, &dentry->d_name,
