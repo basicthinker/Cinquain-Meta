@@ -14,26 +14,16 @@
 #define CINQUAIN_META_CINQ_META_H_
 
 #include "util.h"
-#include "uthash.h"
-
-#define FILE_HASH_WIDTH 16 // bytes
-#define MAX_NAME_LEN 255 // max value
-#define MAX_NESTED_LINKS 6
-
-#define HASH_FIND_BY_STR(hh, head, findstr, out) \
-    HASH_FIND(hh, head, findstr, strlen(findstr), out)
-#define HASH_ADD_BY_STR(hh, head, strfield, add) \
-    HASH_ADD(hh, head, strfield, strlen(add->strfield), add)
-#define HASH_FIND_BY_INT(hh, head, findint, out) \
-    HASH_FIND(hh, head, findint, sizeof(int), out)
-#define HASH_ADD_BY_INT(hh, head, intfield, add) \
-    HASH_ADD(hh, head, intfield, sizeof(int), add)
-#define HASH_REMOVE(hh, head, delptr) \
-    HASH_DELETE(hh, head, delptr)
-
 
 #ifndef __KERNEL__
 // supplement of kernel structure to user space
+
+struct super_block {
+  void *s_fs_info;
+  
+  // Omits all other members.
+  // This is only for interface compatibility.
+};
 
 struct dentry {
   inode_t *d_inode;
@@ -128,17 +118,23 @@ struct cinq_inode {
   __u32 i_generation;
   
   // Cinquain-specific
-  char file_name[MAX_NAME_LEN + 1];
-  char file_handle[FILE_HASH_WIDTH];
-  struct cinq_fsnode *tags; // hash table of tags
-  struct cinq_inode *children; // hash table of children
+  char in_file_name[MAX_NAME_LEN + 1];
+  char in_file_handle[FILE_HASH_WIDTH];
   
+  struct cinq_fsnode *in_tags; // hash table of tags
+  rwlock_t in_tags_lock;
+  
+  struct cinq_inode *in_parent;
+  struct cinq_inode *in_children; // hash table of children
+  rwlock_t in_children_lock;
+  UT_hash_handle in_child;
 };
 
+// No inode cache is necessary since cinq_inodes are in memory.
+// Therefore no public alloc/free-like functions are provided.
 /* inode.c */
-
 extern struct dentry *cinq_lookup(inode_t *dir, struct dentry *dentry,
                                   struct nameidata *nameidata);
-
+extern int cinq_mkdir(inode_t *dir, struct dentry *dentry, int mode);
 
 #endif // CINQUAIN_META_CINQ_META_H_
