@@ -34,9 +34,17 @@
     ((struct cinq_fsnode *)malloc(sizeof(struct cinq_fsnode)))
 #define fsnode_mfree(p) (free(p))
 
+#define tag_malloc() \
+    ((struct cinq_tag *)malloc(sizeof(struct cinq_tag)))
+#define tag_mfree(p) (free(p))
+
 #define inode_malloc() \
-    ((inode_t *)malloc(sizeof(inode_t)))
+    ((struct inode *)malloc(sizeof(struct inode)))
 #define inode_mfree(p) (free(p))
+
+#define cnode_malloc() \
+    ((struct cinq_inode *)malloc(sizeof(struct cinq_inode)))
+#define cnode_mfree(p) (free(p))
 
 #define CURRENT_SEC (time(NULL))
 
@@ -59,13 +67,13 @@ typedef pthread_rwlock_t rwlock_t;
 #define write_lock(lock_p) (pthread_rwlock_wrlock(lock_p))
 #define write_unlock(lock_p) (pthread_rwlock_unlock(lock_p))
 
+#define unlikely(cond) (cond)
+
 struct qstr { // include/linux/dcache.h
   unsigned int hash;
   unsigned int len;
   const unsigned char *name;
 };
-
-typedef struct cinq_inode inode_t;
 
 static inline void * ERR_PTR(long error) { // include/linux/err.h
   return (void *) error;

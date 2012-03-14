@@ -27,10 +27,10 @@ static void __print_fstree(const int depth, const int no,
   struct cinq_fsnode *fsnode;
   HASH_FIND_BY_STR(fs_member, file_systems, subroot->fs_name, fsnode);
   if (fsnode != subroot) {
-    fprintf(stderr, "Error locating fsnode %d: %p != %p\n",
+    fprintf(stderr, "Error locating fsnode %lx: %p != %p\n",
             subroot->fs_id, fsnode, subroot);
   } else {
-    fprintf(stdout, "%d. ID=%u name=%s\n",
+    fprintf(stdout, "%d. ID=%lx name=%s\n",
             no, subroot->fs_id, subroot->fs_name);
   }
   
