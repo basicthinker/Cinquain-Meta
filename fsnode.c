@@ -31,8 +31,15 @@ struct cinq_fsnode *fsnode_new(const char *name, struct cinq_fsnode *parent) {
   if (fsnode) {
     log("[Warning@fsnode_new] duplicate names: %s\n", name);
   }
+  
   fsnode = fsnode_malloc();
   fsnode->fs_id = (unsigned long)fsnode;
+  if (unlikely((void *)fsnode->fs_id != fsnode)) {
+    log("[Error@cnode_new] conversion fails: fs_id %lx != fsnode %p",
+        fsnode->fs_id, fsnode);
+    return ERR_PTR(-EADDRNOTAVAIL);
+  }
+  
   strncpy(fsnode->fs_name, name, MAX_NAME_LEN);
   HASH_ADD_BY_STR(fs_member, file_systems, fs_name, fsnode); // to global list
   if (parent) {

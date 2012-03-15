@@ -17,6 +17,38 @@
 // Supplement of kernel structure to user space.
 // Subject to user-space adjustment.
 
+struct writeback_control {
+  // only for interface compatibility 
+};
+
+struct iattr {
+	unsigned int	ia_valid;
+	umode_t		ia_mode;
+	uid_t		ia_uid;
+	gid_t		ia_gid;
+	loff_t		ia_size;
+	struct timespec	ia_atime;
+	struct timespec	ia_mtime;
+	struct timespec	ia_ctime;
+};
+
+struct vfsmount {
+  struct vfsmount *mnt_parent;    /* fs we are mounted on */
+  struct dentry *mnt_mountpoint;  /* dentry of mountpoint */
+  struct dentry *mnt_root;        /* root of the mounted tree */
+  struct super_block *mnt_sb;     /* pointer to superblock */
+  
+  int mnt_count;
+  int mnt_writers;
+  int mnt_flags; /* 4 bytes hole on 64bits arches without fsnotify */
+  const char *mnt_devname;        /* Name of device e.g. /dev/dsk/hda1 */
+  // struct mnt_namespace *mnt_ns;   /* containing namespace */
+  int mnt_id;                     /* mount identifier */
+  int mnt_group_id;               /* peer group identifier */
+  
+  // Omits all other members.
+};
+
 struct super_block {
   void *s_fs_info;
   

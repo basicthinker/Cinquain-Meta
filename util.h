@@ -58,6 +58,7 @@ typedef unsigned int umode_t;
 typedef unsigned int uid_t;
 typedef unsigned int gid_t;
 typedef uint32_t __u32;
+typedef uint64_t u64;
 typedef long long loff_t;
 
 typedef pthread_rwlock_t rwlock_t;
@@ -85,6 +86,66 @@ static inline void * ERR_PTR(long error) { // include/linux/err.h
 #define ENAMETOOLONG 36 /* File name too long */
 #define EADDRNOTAVAIL 99 /* Cannot assign requested address */
 
+#define MAX_NESTED_LINKS 6
+
+#include "stub.h"
+
+struct super_operations {
+  struct inode *(*alloc_inode)(struct super_block *sb);
+	void (*destroy_inode)(struct inode *);
+  void (*dirty_inode) (struct inode *, int flags);
+	int (*write_inode) (struct inode *, struct writeback_control *wbc);
+	int (*drop_inode) (struct inode *);
+	void (*evict_inode) (struct inode *);
+	void (*put_super) (struct super_block *);
+	void (*write_super) (struct super_block *);
+	int (*sync_fs)(struct super_block *sb, int wait);
+};
+
+struct kstat { // include/linux/stat.h
+  u64 ino;
+  dev_t dev;
+  umode_t mode;
+  unsigned int nlink;
+  uid_t uid;
+  gid_t gid;
+  dev_t rdev;
+  loff_t size;
+  struct timespec  atime;
+  struct timespec mtime;
+  struct timespec ctime;
+  unsigned long blksize;
+  unsigned long long blocks;
+};
+
+struct inode_operations {
+	struct dentry * (*lookup) (struct inode *, struct dentry *, struct nameidata *);
+	void *(*follow_link) (struct dentry *, struct nameidata *);
+	int (*permission) (struct inode *, int);
+	struct posix_acl * (*get_acl)(struct inode *, int);
+  
+	int (*readlink) (struct dentry *, char *, int);
+	void (*put_link) (struct dentry *, struct nameidata *, void *);
+  
+	int (*create) (struct inode *, struct dentry *, int, struct nameidata *);
+	int (*link) (struct dentry *, struct inode *, struct dentry *);
+	int (*unlink) (struct inode *, struct dentry *);
+	int (*symlink) (struct inode *, struct dentry *, const char *);
+	int (*mkdir) (struct inode *, struct dentry *, int);
+	int (*rmdir) (struct inode *, struct dentry *);
+	int (*mknod) (struct inode *, struct dentry *, int, dev_t);
+	int (*rename) (struct inode *, struct dentry *,
+                 struct inode *, struct dentry *);
+	void (*truncate) (struct inode *);
+	int (*setattr) (struct dentry *, struct iattr *);
+	int (*getattr) (struct vfsmount *mnt, struct dentry *, struct kstat *);
+	int (*setxattr) (struct dentry *, const char *, const void *, size_t, int);
+	ssize_t (*getxattr) (struct dentry *, const char *, void *, size_t);
+	ssize_t (*listxattr) (struct dentry *, char *, size_t);
+	int (*removexattr) (struct dentry *, const char *);
+	void (*truncate_range)(struct inode *, loff_t, loff_t);
+};
+
 #endif // __KERNEL__
 
 
@@ -95,7 +156,6 @@ static inline void * ERR_PTR(long error) { // include/linux/err.h
 
 #define FILE_HASH_WIDTH 16 // bytes
 #define MAX_NAME_LEN 255 // max value
-#define MAX_NESTED_LINKS 6
 
 #define HASH_FIND_BY_STR(hh, head, findstr, out) \
     HASH_FIND(hh, head, findstr, strlen(findstr), out)

@@ -14,7 +14,6 @@
 #define CINQUAIN_META_CINQ_META_H_
 
 #include "util.h"
-#include "stub.h"
 
 /* Cinquain File System Data Structures and Operations */
 
@@ -62,9 +61,12 @@ enum cinq_inherit_type {
 #define CINQ_MODE_SHIFT 30
 #define I_MODE_FILTER 01111111111
 
+struct cinq_inode;
+
 struct cinq_tag {
   struct cinq_fsnode *t_fs; // key for hh
-  struct inode *t_inode;
+  struct cinq_inode *t_host; // who holds the hash table this tag belongs to
+  struct inode *t_inode; // whose i_no points to this tag
 
   enum cinq_inherit_type t_mode;
   char in_file_handle[FILE_HASH_WIDTH];
@@ -91,5 +93,11 @@ struct cinq_inode {
 extern struct dentry *cinq_lookup(struct inode *dir, struct dentry *dentry,
                                   struct nameidata *nameidata);
 extern int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode);
+
+// helper functions for user-space implementation
+extern void cnode_free_all(struct cinq_inode *root);
+
+// Allocates a new inode with Cinquain-specific initialization (partial). 
+extern struct inode *cinq_alloc_inode(struct super_block *sb);
 
 #endif // CINQUAIN_META_CINQ_META_H_
