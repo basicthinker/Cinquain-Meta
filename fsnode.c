@@ -28,17 +28,14 @@ static inline int fsnode_ancestor_(struct cinq_fsnode *ancestor,
 struct cinq_fsnode *fsnode_new(const char *name, struct cinq_fsnode *parent) {
   struct cinq_fsnode *fsnode;
   HASH_FIND_BY_STR(fs_member, file_systems, name, fsnode);
-  if (fsnode) {
-    log("[Warning@fsnode_new] duplicate names: %s\n", name);
-  }
+  
+  DEBUG_ON_(fsnode, "[Warning@fsnode_new] duplicate names: %s\n", name);
   
   fsnode = fsnode_malloc();
   fsnode->fs_id = (unsigned long)fsnode;
-  if (unlikely((void *)fsnode->fs_id != fsnode)) {
-    log("[Error@cnode_new] conversion fails: fs_id %lx != fsnode %p",
-        fsnode->fs_id, fsnode);
-    return ERR_PTR(-EADDRNOTAVAIL);
-  }
+  DEBUG_ON_((void *)fsnode->fs_id != fsnode,
+           "[Error@cnode_new] conversion fails: fs_id %lx != fsnode %p",
+           fsnode->fs_id, fsnode);
   
   strncpy(fsnode->fs_name, name, MAX_NAME_LEN);
   HASH_ADD_BY_STR(fs_member, file_systems, fs_name, fsnode); // to global list
@@ -54,8 +51,8 @@ struct cinq_fsnode *fsnode_new(const char *name, struct cinq_fsnode *parent) {
 
 void fsnode_free(struct cinq_fsnode *fsnode) {
   if (fsnode->fs_children) {
-    log("[Error@fsnode_free] failed to delete fsnode %lu "
-        "who still has children.\n", fsnode->fs_id);
+    DEBUG_("[Warning@fsnode_free] failed to delete fsnode %lu "
+           "who still has children.\n", fsnode->fs_id);
     return;
   }
   if (!fsnode_is_root(fsnode) && fsnode->fs_parent) {
@@ -67,9 +64,9 @@ void fsnode_free(struct cinq_fsnode *fsnode) {
 
 void fsnode_free_all(struct cinq_fsnode *fsnode) {
   if (fsnode->fs_children) {
-    struct cinq_fsnode *current, *tmp;
-    HASH_ITER(fs_child, fsnode->fs_children, current, tmp) {
-      fsnode_free_all(current);
+    struct cinq_fsnode *cur, *tmp;
+    HASH_ITER(fs_child, fsnode->fs_children, cur, tmp) {
+      fsnode_free_all(cur);
     }
   }
   fsnode_free(fsnode);
@@ -78,9 +75,9 @@ void fsnode_free_all(struct cinq_fsnode *fsnode) {
 void fsnode_move(struct cinq_fsnode *child,
                           struct cinq_fsnode *new_parent) {
   if (fsnode_ancestor_(child, new_parent)) {
-    log("[Error@fsnode_change_parent] change fsnode %lu's parent "
-        "from %lu to %lu.\n",
-        child->fs_id, child->fs_parent->fs_id, new_parent->fs_id);
+    DEBUG_("[Error@fsnode_change_parent] change fsnode %lu's parent "
+           "from %lu to %lu.\n",
+           child->fs_id, child->fs_parent->fs_id, new_parent->fs_id);
     return;
   }
   HASH_REMOVE(fs_child, child->fs_parent->fs_children, child);

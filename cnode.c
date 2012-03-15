@@ -49,11 +49,24 @@ static inline struct cinq_tag *tag_new_(struct cinq_fsnode *fs,
   return tag;
 }
 
+// Retrieves the super_operations corresponding to the tag
+static inline const struct super_operations *s_op_(struct cinq_tag *tag) {
+  return tag->t_inode->i_sb->s_op;
+}
+
+static inline void tag_free_(struct cinq_tag *tag) {
+  s_op_(tag)->destroy_inode(tag->t_inode);
+  write_lock(&tag->t_host->ci_tags_lock);
+  HASH_DEL(tag->t_host->ci_tags, tag);
+  write_unlock(&tag->t_host->ci_tags_lock);
+  tag_mfree(tag);
+}
+
 static struct cinq_inode *cnode_new_(struct cinq_inode *parent) {
   
   struct cinq_inode *cnode = cnode_malloc();
   if (unlikely(!cnode)) {
-    log("[Error@cnode_new] allocation fails: parent=%p.p\n", parent);
+    DEBUG_("[Error@cnode_new] allocation fails: parent=%p.p\n", parent);
     return NULL;
   }
   
@@ -77,8 +90,8 @@ static struct cinq_inode *cnode_new_(struct cinq_inode *parent) {
 
 static void cnode_free_(struct cinq_inode *cnode) {
   if (cnode->ci_tags || cnode->ci_children) {
-    log("[Error@cnode_free] failed to delete cnode %lx "
-        "who still has tags or children.\n", cnode->ci_id);
+    DEBUG_("[Error@cnode_free] failed to delete cnode %lx "
+           "who still has tags or children.\n", cnode->ci_id);
     return;
   }
   struct cinq_inode *parent = cnode->ci_parent;
@@ -90,8 +103,26 @@ static void cnode_free_(struct cinq_inode *cnode) {
   cnode_free_(cnode);
 }
 
+// This function is NOT thread safe, since it is used in the end,
+// and a single thread is proper then.
 void cnode_free_all(struct cinq_inode *root) {
-  
+  if (root->ci_children) {
+    struct cinq_inode *cur, *tmp;
+    HASH_ITER(ci_child, root->ci_children, cur, tmp) {
+      cnode_free_all(cur);
+    }
+    DEBUG_ON_(root->ci_children != NULL,
+              "[Error@cnode_free_all] not empty children: %lu\n", root->ci_id);
+  }
+  if (root->ci_tags) {
+    struct cinq_tag *cur, *tmp;
+    HASH_ITER(hh, root->ci_tags, cur, tmp) {
+      tag_free_(cur);
+    }
+    DEBUG_ON_(root->ci_tags != NULL,
+              "[Error@cnode_free_all] not empty tags: %lu\n", root->ci_id);
+  }
+  cnode_free_(root);
 }
 
 // @dentry: contains cinq_fsnode.fs_id in its d_fsdata, which specifies
@@ -105,7 +136,7 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
   struct cinq_inode *child;
   char *name = (char *)dentry->d_name.name;
   if (dentry->d_name.len > MAX_NAME_LEN) {
-    log("[Error@cinq_mkdir] name is too long: %s\n", name);
+    DEBUG_("[Error@cinq_mkdir] name is too long: %s\n", name);
     return -ENAMETOOLONG;
   }
   
@@ -152,8 +183,8 @@ static inline struct inode *cinq_lookup_(const struct inode *dir,
   read_unlock(&parent->ci_children_lock);
   
   if (!child) {
-    log("[Info@__cinq_lookup] no dir or file name is found: %s@%p\n",
-        name, dir);
+    DEBUG_("[Info@cinq_lookup_] no dir or file name is found: %s@%p\n",
+           name, dir);
     return NULL;
   }
   
@@ -163,8 +194,8 @@ static inline struct inode *cinq_lookup_(const struct inode *dir,
   HASH_FIND_PTR(child->ci_tags, &fs, tag);
   while (!tag) {
     if (fsnode_is_root(fs)) {
-      log("[Info@__cinq_lookup] no file system has that dir or file:"
-          "%s from %lu", name, (*fs_p)->fs_id);
+      DEBUG_("[Info@cinq_lookup_] no file system has that dir or file:"
+             "%s from %lu", name, (*fs_p)->fs_id);
       break;
     }
     fs = fs->fs_parent;

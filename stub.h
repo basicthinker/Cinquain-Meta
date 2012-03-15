@@ -51,6 +51,7 @@ struct vfsmount {
 
 struct super_block {
   void *s_fs_info;
+  const struct super_operations *s_op;
   
   // Omits all other members.
   // This is only for interface compatibility.
@@ -61,6 +62,8 @@ struct inode {
   uid_t i_uid; 
   gid_t i_gid;
   unsigned int i_flags;
+  const struct inode_operations *i_op;
+  struct super_block *i_sb;
   
   /* Stat data, not accessed from path walking */
   unsigned long i_no;

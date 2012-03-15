@@ -28,7 +28,14 @@
 #include <string.h>
 #include <pthread.h>
 
-#define log(...) (fprintf(stderr, __VA_ARGS__))
+#define LOG(...) (fprintf(stdout, __VA_ARGS__))
+#ifdef CINQ_DEBUG
+#define DEBUG_ON_(cond, ...) if (cond) { fprintf(stderr, __VA_ARGS__); }
+#define DEBUG_(...) (fprintf(stderr, __VA_ARGS__))
+#else
+#define DEBUG_ON_(cond, ...)
+#define DEBUG_(...)
+#endif // CINQ_DEBUG
 
 #define fsnode_malloc() \
     ((struct cinq_fsnode *)malloc(sizeof(struct cinq_fsnode)))

@@ -69,7 +69,8 @@ int main (int argc, const char * argv[])
   fsnode_move(root->fs_children, extra); // moves its first child
   fprintf(stdout, "\nAfter move:\n");
   print_fstree(root);
-  fprintf(stderr, "\nTry wrong operation with an error expected:\n");
+  fprintf(stderr, "\nTry wrong operation. \n"
+          "(with error message if using -DCINQ_DEBUG)\n");
   fsnode_move(root, extra); // try invalid operation
   
   fsnode_free_all(root);
