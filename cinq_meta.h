@@ -54,6 +54,9 @@ extern void fsnode_free_all(struct cinq_fsnode *fsnode);
 extern void fsnode_move(struct cinq_fsnode *child,
                         struct cinq_fsnode *new_parent);
 
+// Removes the fsnode and connect its single child to its parent
+extern void fsnode_bridge(struct cinq_fsnode *out);
+
 enum cinq_inherit_type {
   CINQ_OVERWR = 1,
   CINQ_MERGE = 2

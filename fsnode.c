@@ -51,8 +51,8 @@ struct cinq_fsnode *fsnode_new(const char *name, struct cinq_fsnode *parent) {
 
 void fsnode_free(struct cinq_fsnode *fsnode) {
   if (fsnode->fs_children) {
-    DEBUG_("[Warning@fsnode_free] failed to delete fsnode %lu "
-           "who still has children.\n", fsnode->fs_id);
+    DEBUG_("[Warning@fsnode_free] failed to delete fsnode %lx(%s) "
+           "who still has children.\n", fsnode->fs_id, fsnode->fs_name);
     return;
   }
   if (!fsnode_is_root(fsnode) && fsnode->fs_parent) {
@@ -73,7 +73,7 @@ void fsnode_free_all(struct cinq_fsnode *fsnode) {
 }
 
 void fsnode_move(struct cinq_fsnode *child,
-                          struct cinq_fsnode *new_parent) {
+                 struct cinq_fsnode *new_parent) {
   if (fsnode_ancestor_(child, new_parent)) {
     DEBUG_("[Error@fsnode_change_parent] change fsnode %lu's parent "
            "from %lu to %lu.\n",
@@ -83,4 +83,14 @@ void fsnode_move(struct cinq_fsnode *child,
   HASH_REMOVE(fs_child, child->fs_parent->fs_children, child);
   child->fs_parent = new_parent; // supposed to be atomic
   HASH_ADD_BY_PTR(fs_child, new_parent->fs_children, fs_id, child);
+}
+
+void fsnode_bridge(struct cinq_fsnode *out) {
+  DEBUG_ON_(HASH_CNT(fs_child, out->fs_children) > 1,
+            "[Warning@fsnode_bridge] crossing out who has more than one child: "
+            "%lx(%s).\n", out->fs_id, out->fs_name);
+  if (out->fs_children) {
+    fsnode_move(out->fs_children, out->fs_parent);
+  }
+  fsnode_free(out);
 }
