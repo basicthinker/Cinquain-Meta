@@ -17,7 +17,7 @@ struct inode *cinq_alloc_inode(struct super_block *sb) {
   
 #ifndef __KERNEL__ // for user space
   inode->i_nlink = 1;
-  inode->i_ctime = inode->i_mtime = CURRENT_SEC;
+  inode->i_ctime = inode->i_mtime = current_time_();
 #endif // __KERNEL__
   
   return inode;
@@ -29,7 +29,7 @@ static inline int cnode_is_root_(struct cinq_inode *cnode) {
 
 // Retrieves cinq_inode pointer from inode
 static inline struct cinq_inode *cnode_(const struct inode *inode) {
-  return ((struct cinq_tag *)inode->i_no)->t_host;
+  return ((struct cinq_tag *)inode->i_ino)->t_host;
 }
 
 static inline struct cinq_tag *tag_new_(struct cinq_fsnode *fs,
@@ -45,7 +45,7 @@ static inline struct cinq_tag *tag_new_(struct cinq_fsnode *fs,
   tag->t_inode = inode;
   tag->t_mode = mode;
   
-  inode->i_no = (unsigned long) tag;
+  inode->i_ino = (unsigned long) tag;
   return tag;
 }
 
@@ -125,10 +125,6 @@ void cnode_free_all(struct cinq_inode *root) {
   cnode_free_(root);
 }
 
-// @dentry: contains cinq_fsnode.fs_id in its d_fsdata, which specifies
-//    the file system to take the operation.
-//    Its d_name contains the string name of new dir.
-// @mode: the left most 2 bits denote inheritance type
 int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
   struct cinq_inode *parent = cnode_(dir);
   struct cinq_fsnode *fs = dentry->d_fsdata;
@@ -207,21 +203,19 @@ static inline struct inode *cinq_lookup_(const struct inode *dir,
   return tag->t_inode;
 }
 
-// @dentry: a negative dentry, namely whose d_inode is null.
-//    It is used to pass in target name.
-// @nameidata: reserves the result of last segment
 struct dentry *cinq_lookup(struct inode *dir, struct dentry *dentry,
                            struct nameidata *nameidata) {
   if (dentry->d_name.len >= MAX_NAME_LEN)
     return ERR_PTR(-ENAMETOOLONG);
   
-  struct cinq_fsnode *lookuper = nameidata->path.dentry->d_fsdata;
+  struct cinq_fsnode *fs = nameidata ?
+      nameidata->path.dentry->d_fsdata : dentry->d_fsdata;
   struct inode *inode = cinq_lookup_(dir, (const char *)dentry->d_name.name,
-                                 &lookuper);
+                                     &fs);
+  dentry->d_fsdata = fs;
   if (!inode) {
     d_add(dentry, NULL);
     return NULL;
   }
-  dentry->d_fsdata = lookuper;
   return d_splice_alias(inode, dentry);
 }

@@ -14,6 +14,10 @@
 
 #include "cinq_meta.h"
 
+/* Test config */
+#define FS_CHILDREN_ 3
+#define CNODE_CHILDREN_ 10 // should be larger than FS_CHILDREN_
+
 struct cinq_fsnode *fs_root;
 extern struct cinq_fsnode *file_systems;
 
@@ -68,38 +72,75 @@ static inline void print_cnode_tree(struct cinq_inode *root) {
   print_cnode_tree_(0, 1, root);
 }
 
+// Example for invoking cinq_mkdir and cinq_lookup
+static void make_dir_tree(struct cinq_fsnode *fs, struct inode *dir) {
+  int i, j, k;
+  char buffer[MAX_NAME_LEN + 1];
+  int mode = CINQ_MERGE << CINQ_MODE_SHIFT;
+  for (i = 1; i <= CNODE_CHILDREN_; ++i) {
+    struct dentry den;
+    den.d_fsdata = (void *)fs->fs_id;
+    sprintf(buffer, "%d", i);
+    den.d_name.name = (unsigned char *)buffer;
+    if (cinq_mkdir(dir, &den, mode)) {
+      DEBUG_("[Error@make_dir_tree] failed to make dir '%s' by %lx(%s).\n",
+             buffer, fs->fs_id, fs->fs_name);
+      return;
+    }
+    struct dentry *sub_den = cinq_lookup(dir, &den, NULL);
+    for (j = 1; j <= CNODE_CHILDREN_; ++j) {
+      struct dentry den;
+      den.d_fsdata = (void *)fs->fs_id;
+      sprintf(buffer, "%d", j);
+      den.d_name.name = (unsigned char *)buffer;
+      if (cinq_mkdir(dir, &den, mode)) {
+        DEBUG_("[Error@make_dir_tree] failed to make dir '%s' by %lx(%s).\n",
+               buffer, fs->fs_id, fs->fs_name);
+        return;
+      }
+      
+      for (k = 1; k <= CNODE_CHILDREN_; ++k) {
+        
+      }
+    }
+  }
+}
+
 int main (int argc, const char * argv[])
 {
-  fs_root = fsnode_new("template", NULL);
+  fs_root = fsnode_new("1", NULL);
   
-  // Constructs a basic balanced tree
-  const int num_children = 3;
+  // Constructs a basic balanced file system tree
   int i, j;
-  char buffer[MAX_NAME_LEN + 1];
-  for (i = 1; i <= num_children; ++i) {
-    sprintf(buffer, "customer_%x", i); // produces unique name
-    struct cinq_fsnode *child = fsnode_new(buffer, fs_root);
-    for (j = 1; j <= num_children; ++j) {
-      sprintf(buffer, "customer_%x", i * num_children + j); // produces unique name
-      fsnode_new(buffer, child);
+  char sub[MAX_NAME_LEN + 1];
+  for (i = 1; i <= FS_CHILDREN_; ++i) {
+    sprintf(sub, "1.%x", i); // produces unique name
+    struct cinq_fsnode *child = fsnode_new(sub, fs_root);
+    for (j = 1; j <= FS_CHILDREN_; ++j) {
+      char subsub[MAX_NAME_LEN + 1];
+      sprintf(subsub, "%s.%x", sub, j); // produces unique name
+      fsnode_new(subsub, child);
     }
   }
   fprintf(stdout, "\nConstruct a file system tree:\n");
   print_fstree(fs_root);
   
+  
+  /* The following two steps simulate the process of file system update. */
   // Moves a subtree
-  struct cinq_fsnode *extra = fsnode_new("customer_extra", fs_root);
+  struct cinq_fsnode *extra = fsnode_new("extra", fs_root);
   fsnode_move(fs_root->fs_children, extra); // moves its first child
-  fprintf(stdout, "\nAfter move:\n");
+  fprintf(stdout, "\nAfter adding 'extra' and moving:\n");
   print_fstree(fs_root);
   fprintf(stderr, "\nTry wrong operation. \n"
           "(with error message if using -DCINQ_DEBUG)\n");
   fsnode_move(fs_root, extra); // try invalid operation
   
-  // Bridges the extra created above
-  fprintf(stdout, "\nCross out the extra:\n");
+  // Bridges the extra created above.
+  fprintf(stdout, "\nCross out 'extra':\n");
   fsnode_bridge(extra);
   print_fstree(fs_root);
+  
   
   // Generates balanced dir/file tree on each file system
   

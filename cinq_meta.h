@@ -13,7 +13,7 @@
 #ifndef CINQUAIN_META_CINQ_META_H_
 #define CINQUAIN_META_CINQ_META_H_
 
-#include "util.h"
+#include "stub.h"
 
 /* Cinquain File System Data Structures and Operations */
 
@@ -92,9 +92,21 @@ struct cinq_inode {
 
 // No inode cache is necessary since cinq_inodes are in memory.
 // Therefore no public alloc/free-like functions are provided.
+
 /* cnode.c */
+
+// @dentry: a negative dentry, namely whose d_inode is null.
+//    Its d_fsdata contains cinq_fsnode.fs_id that specifies the file system
+//    to take the operation.
+//    Its d_name contains the name of target.
+// @nameidata: reserves the result of last segment
 extern struct dentry *cinq_lookup(struct inode *dir, struct dentry *dentry,
                                   struct nameidata *nameidata);
+
+// @dentry: contains cinq_fsnode.fs_id in its d_fsdata, which specifies
+//    the file system to take the operation.
+//    Its d_name contains the string name of new dir.
+// @mode: the left most 2 bits denote inheritance type
 extern int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode);
 
 // helper functions for user-space implementation
