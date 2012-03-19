@@ -4,20 +4,14 @@
  */
 
 //
-//  stub.h
+//  vfs.h
 //  cinquain-meta
 //
-//  Created by Jinglei Ren  <jinglei.ren@gmail.com> on 3/11/12.
+//  Created by Jinglei Ren <jinglei.ren@gmail.com> on 3/18/12.
 //
 
-#ifndef CINQUAIN_META_STUB_H_
-#define CINQUAIN_META_STUB_H_
-
-#ifndef __KERNEL__
-// Supplement of kernel structure to user space.
-// Subject to user-space adjustment.
-
-#include "util.h"
+#ifndef CINQUAIN_META_VFS_H_
+#define CINQUAIN_META_VFS_H_
 
 struct writeback_control {
   // only for interface compatibility 
@@ -25,13 +19,6 @@ struct writeback_control {
 
 struct vfsmount {
   // Only for interface compatibility
-};
-
-struct path {
-  struct dentry *dentry;
-  
-  // Omits a vfsmount-related member.
-  // User-space implementation does not handle vfsmount.
 };
 
 struct iattr {
@@ -119,20 +106,6 @@ struct super_block {
   //	const struct dentry_operations *s_d_op; /* default d_op for dentries */
 };
 
-struct nameidata {
-  struct path path;
-  struct qstr last;
-  struct path root;
-  struct inode *inode; /* path.dentry.d_inode */
-  unsigned int flags;
-  unsigned int seq;
-  int last_type;
-  unsigned depth;
-  char *saved_names[MAX_NESTED_LINKS + 1];
-  
-  // Omits intent data
-};
-
 struct inode {
 	/* RCU path lookup touches following: */
 	umode_t		i_mode;
@@ -217,6 +190,27 @@ struct dentry {
   // User-space implementation should provide independent dentry cache.
 };
 
+struct path {
+  struct dentry *dentry;
+  
+  // Omits a vfsmount-related member.
+  // User-space implementation does not handle vfsmount.
+};
+
+struct nameidata {
+  struct path path;
+  struct qstr last;
+  struct path root;
+  struct inode *inode; /* path.dentry.d_inode */
+  unsigned int flags;
+  unsigned int seq;
+  int last_type;
+  unsigned depth;
+  char *saved_names[MAX_NESTED_LINKS + 1];
+  
+  // Omits intent data
+};
+
 struct file {
 	/*
 	 * fu_list becomes invalid after file_free is called and queued via
@@ -259,6 +253,117 @@ struct file {
   //#endif
 };
 
+struct super_operations {
+  struct inode *(*alloc_inode)(struct super_block *sb);
+	void (*destroy_inode)(struct inode *);
+  
+  void (*dirty_inode) (struct inode *);
+	int (*write_inode) (struct inode *, struct writeback_control *wbc);
+	int (*drop_inode) (struct inode *);
+	void (*evict_inode) (struct inode *);
+	void (*put_super) (struct super_block *);
+	void (*write_super) (struct super_block *);
+	int (*sync_fs)(struct super_block *sb, int wait);
+	int (*freeze_fs) (struct super_block *);
+	int (*unfreeze_fs) (struct super_block *);
+  // int (*statfs) (struct dentry *, struct kstatfs *);
+	int (*remount_fs) (struct super_block *, int *, char *);
+	void (*umount_begin) (struct super_block *);
+  
+  // int (*show_options)(struct seq_file *, struct vfsmount *);
+	// int (*show_devname)(struct seq_file *, struct vfsmount *);
+	// int (*show_path)(struct seq_file *, struct vfsmount *);
+	// int (*show_stats)(struct seq_file *, struct vfsmount *);
+#ifdef CONFIG_QUOTA
+	ssize_t (*quota_read)(struct super_block *, int, char *, size_t, loff_t);
+	ssize_t (*quota_write)(struct super_block *, int, const char *, size_t, loff_t);
+#endif
+	// int (*bdev_try_to_free_page)(struct super_block*, struct page*, gfp_t);
+};
+
+struct kstat { // include/linux/stat.h
+  u64 ino;
+  dev_t dev;
+  umode_t mode;
+  unsigned int nlink;
+  uid_t uid;
+  gid_t gid;
+  dev_t rdev;
+  loff_t size;
+  struct timespec  atime;
+  struct timespec mtime;
+  struct timespec ctime;
+  unsigned long blksize;
+  unsigned long long blocks;
+};
+
+struct inode_operations {
+	struct dentry * (*lookup) (struct inode *,struct dentry *, struct nameidata *);
+	void * (*follow_link) (struct dentry *, struct nameidata *);
+	int (*permission) (struct inode *, int, unsigned int);
+	int (*check_acl)(struct inode *, int, unsigned int);
+  
+	int (*readlink) (struct dentry *, char *,int);
+	void (*put_link) (struct dentry *, struct nameidata *, void *);
+  
+	int (*create) (struct inode *,struct dentry *,int, struct nameidata *);
+	int (*link) (struct dentry *,struct inode *,struct dentry *);
+	int (*unlink) (struct inode *,struct dentry *);
+	int (*symlink) (struct inode *,struct dentry *,const char *);
+	int (*mkdir) (struct inode *,struct dentry *,int);
+	int (*rmdir) (struct inode *,struct dentry *);
+	int (*mknod) (struct inode *,struct dentry *,int,dev_t);
+	int (*rename) (struct inode *, struct dentry *,
+                 struct inode *, struct dentry *);
+	void (*truncate) (struct inode *);
+	int (*setattr) (struct dentry *, struct iattr *);
+	int (*getattr) (struct vfsmount *mnt, struct dentry *, struct kstat *);
+	int (*setxattr) (struct dentry *, const char *,const void *,size_t,int);
+	ssize_t (*getxattr) (struct dentry *, const char *, void *, size_t);
+	ssize_t (*listxattr) (struct dentry *, char *, size_t);
+	int (*removexattr) (struct dentry *, const char *);
+	void (*truncate_range)(struct inode *, loff_t, loff_t);
+	// int (*fiemap)(struct inode *, struct fiemap_extent_info *, u64 start, 
+  //               u64 len);
+};
+
+typedef int (*filldir_t)(void *, const char *, int, loff_t, u64, unsigned);
+
+/*
+ * NOTE:
+ * all file operations except setlease can be called without
+ * the big kernel lock held in all filesystems.
+ */
+struct file_operations {
+	// struct module *owner;
+	loff_t (*llseek) (struct file *, loff_t, int);
+	ssize_t (*read) (struct file *, char *, size_t, loff_t *);
+	ssize_t (*write) (struct file *, const char *, size_t, loff_t *);
+  // ssize_t (*aio_read) (struct kiocb *, const struct iovec *, unsigned long, loff_t);
+	// ssize_t (*aio_write) (struct kiocb *, const struct iovec *, unsigned long, loff_t);
+	int (*readdir) (struct file *, void *, filldir_t);
+	// unsigned int (*poll) (struct file *, struct poll_table_struct *);
+	// long (*unlocked_ioctl) (struct file *, unsigned int, unsigned long);
+	// long (*compat_ioctl) (struct file *, unsigned int, unsigned long);
+	// int (*mmap) (struct file *, struct vm_area_struct *);
+	int (*open) (struct inode *, struct file *);
+	// int (*flush) (struct file *, fl_owner_t id);
+	int (*release) (struct inode *, struct file *);
+	int (*fsync) (struct file *, int datasync);
+	// int (*aio_fsync) (struct kiocb *, int datasync);
+	// int (*fasync) (int, struct file *, int);
+	// int (*lock) (struct file *, int, struct file_lock *);
+	// ssize_t (*sendpage) (struct file *, struct page *, int, size_t, loff_t *, int);
+	unsigned long (*get_unmapped_area)(struct file *, unsigned long, unsigned long, unsigned long, unsigned long);
+	int (*check_flags)(int);
+	// int (*flock) (struct file *, int, struct file_lock *);
+	// ssize_t (*splice_write)(struct pipe_inode_info *, struct file *, loff_t *, size_t, unsigned int);
+	// ssize_t (*splice_read)(struct file *, loff_t *, struct pipe_inode_info *, size_t, unsigned int);
+	// int (*setlease)(struct file *, long, struct file_lock **);
+	long (*fallocate)(struct file *file, int mode, loff_t offset,
+                    loff_t len);
+};
+
 /**
  * inode_init_always - perform inode structure intialisation
  * @sb: superblock inode belongs to
@@ -267,14 +372,14 @@ struct file {
  * These are initializations that need to be done on every inode
  * allocation as the fields are not initialised by slab allocation.
  */
-static int inode_init_always(struct super_block *sb, struct inode *inode)
+static inline int inode_init_always(struct super_block *sb, struct inode *inode)
 {
   static const struct inode_operations empty_iops;
   static const struct file_operations empty_fops;
   // struct address_space *const mapping = &inode->i_data;
   
   inode->i_sb = sb;
-  // inode->i_blkbits = sb->s_blocksize_bits;
+  inode->i_blkbits = sb->s_blocksize_bits;
   inode->i_flags = 0;
   // atomic_set(&inode->i_count, 1);
   inode->i_op = &empty_iops;
@@ -293,9 +398,9 @@ static int inode_init_always(struct super_block *sb, struct inode *inode)
   // inode->i_pipe = NULL;
   // inode->i_bdev = NULL;
   // inode->i_cdev = NULL;
-  // inode->i_rdev = 0;
+  inode->i_rdev = 0;
   inode->dirtied_when = 0;
- 
+  
   // if (security_inode_alloc(inode))
   //   goto out;
   // spin_lock_init(&inode->i_lock);
@@ -323,8 +428,8 @@ static int inode_init_always(struct super_block *sb, struct inode *inode)
   // if (sb->s_bdev) {
   //   struct backing_dev_info *bdi;
   //
-  // bdi = sb->s_bdev->bd_inode->i_mapping->backing_dev_info;
-  // mapping->backing_dev_info = bdi;
+  //   bdi = sb->s_bdev->bd_inode->i_mapping->backing_dev_info;
+  //   mapping->backing_dev_info = bdi;
   // }
   // inode->i_private = NULL;
   // inode->i_mapping = mapping;
@@ -335,60 +440,35 @@ static int inode_init_always(struct super_block *sb, struct inode *inode)
   // #ifdef CONFIG_FSNOTIFY
   //   inode->i_fsnotify_mask = 0;
   // #endif
-
+  
   // this_cpu_inc(nr_inodes);
-
+  
   return 0;
-out:
-  return -ENOMEM;
+  //out:
+  //  return -ENOMEM;
 }
 
-/**
- * d_add - add dentry to hash queues
- * @entry: dentry to add
- * @inode: the inode to attach to this dentry
- *
- * This adds the entry to the hash queues and initializes @inode.
- * The entry was actually filled in earlier during d_alloc().
-*/
-static inline void d_add(struct dentry *entry, struct inode *inode) {
-  // User-space implementation for dentry cache.
-  // This function attaches the inode to the dentry.
-  entry->d_inode = inode;
+static inline struct inode *alloc_inode(struct super_block *sb)
+{
+	struct inode *inode;
+  
+	if (sb->s_op->alloc_inode)
+		inode = sb->s_op->alloc_inode(sb); // no specific alloc function
+	else
+		inode = inode_malloc(); // adjusted for user space
+  
+	if (!inode)
+		return NULL;
+  
+	if (unlikely(inode_init_always(sb, inode))) {
+		if (inode->i_sb->s_op->destroy_inode)
+			inode->i_sb->s_op->destroy_inode(inode);
+		else
+			inode_mfree(inode); // adjusted for user space
+		return NULL;
+	}
+  
+	return inode;
 }
 
-/**
- * d_splice_alias - splice a disconnected dentry into the tree if one exists
- * @inode:  the inode which may have a disconnected dentry
- * @dentry: a negative dentry which we want to point to the inode.
- *
- * If inode is a directory and has a 'disconnected' dentry (i.e. IS_ROOT and
- * DCACHE_DISCONNECTED), then d_move that in place of the given dentry
- * and return it, else simply d_add the inode to the dentry and return NULL.
- *
- * This is needed in the lookup routine of any filesystem that is exportable
- * (via knfsd) so that we can build dcache paths to directories effectively.
- *
- * If a dentry was found and moved, then it is returned.  Otherwise NULL
- * is returned.  This matches the expected return value of ->lookup.
- *
-*/
-static inline struct dentry *d_splice_alias(struct inode *inode,
-                                            struct dentry *dentry) {
-  // Needs complete user-space implementation
-  return dentry;
-}
-
-/**
- * inode_sb_list_add - add inode to the superblock list of inodes
- * @inode: inode to add
- */
-static inline void inode_sb_list_add(struct inode *inode) {
-  // This function can be left empty in user space for convenience.
-  // Tailor it as user-space implementation needs.
-  return;
-}
-
-#endif // __KERNEL__
-
-#endif // CINQUAIN_META_STUB_H_
+#endif // CINQUAIN_META_VFS_H_

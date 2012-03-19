@@ -13,7 +13,7 @@
 #ifndef CINQUAIN_META_CINQ_META_H_
 #define CINQUAIN_META_CINQ_META_H_
 
-#include "stub.h"
+#include "util.h"
 
 /* Cinquain File System Data Structures and Operations */
 
@@ -96,12 +96,32 @@ struct cinq_inode {
 /* cnode.c */
 
 // @dentry: a negative dentry, namely whose d_inode is null.
-//    Its d_fsdata contains cinq_fsnode.fs_id that specifies the file system
-//    to take the operation.
-//    Its d_name contains the name of target.
-// @nameidata: reserves the result of last segment
+//    dentry->d_fsdata should better contains cinq_fsnode.fs_id that specifies
+//    the file system (cinq_fsnode) to take the operation. Otherwise,
+//    the nameidata is used to get the fsnode.
+//    dentry->d_name contains the name of target.
+// @nameidata: reserves the result of last segment.
+//    If the fsnode is specified via dentry->d_fsdata,
+//    this parameter can be set null.
 extern struct dentry *cinq_lookup(struct inode *dir, struct dentry *dentry,
                                   struct nameidata *nameidata);
+
+extern int cinq_create(struct inode *dir, struct dentry *dentry,
+                int mode, struct nameidata *nameidata);
+
+extern int cinq_link(struct dentry *old_dentry, struct inode *dir,
+              struct dentry *dentry);
+
+extern int cinq_unlink(struct inode *dir, struct dentry *dentry);
+
+extern int cinq_symlink(struct inode *dir, struct dentry *dentry, const char *symname);
+
+extern int cinq_rmdir(struct inode *dir, struct dentry *dentry);
+
+extern int cinq_rename(struct inode *old_dir, struct dentry *old_dentry,
+                struct inode *new_dir, struct dentry *new_dentry);
+
+extern int cinq_setattr(struct dentry *dentry, struct iattr *attr);
 
 // @dentry: contains cinq_fsnode.fs_id in its d_fsdata, which specifies
 //    the file system to take the operation.

@@ -201,8 +201,12 @@ static inline struct inode *cinq_lookup_(const struct inode *dir,
  
   *fs_p = tag->t_fs;
   return tag->t_inode;
+  
+  // Since we directly read meta data in memory, there is no iget-like function.
+  // No inodes are cached or added to super_block inode list.
 }
 
+// Interface: see comments in cinq_meta.h
 struct dentry *cinq_lookup(struct inode *dir, struct dentry *dentry,
                            struct nameidata *nameidata) {
   if (dentry->d_name.len >= MAX_NAME_LEN)
@@ -211,11 +215,42 @@ struct dentry *cinq_lookup(struct inode *dir, struct dentry *dentry,
   struct cinq_fsnode *fs = nameidata ?
       nameidata->path.dentry->d_fsdata : dentry->d_fsdata;
   struct inode *inode = cinq_lookup_(dir, (const char *)dentry->d_name.name,
-                                     &fs);
+                                     &fs); // incorporates cinq_iget function
   dentry->d_fsdata = fs;
   if (!inode) {
-    d_add(dentry, NULL);
-    return NULL;
+    return ERR_PTR(-EIO);
   }
   return d_splice_alias(inode, dentry);
+}
+
+int cinq_create(struct inode *dir, struct dentry *dentry,
+                int mode, struct nameidata *nameidata) {
+  return 0;
+}
+
+int cinq_link(struct dentry *old_dentry, struct inode *dir,
+              struct dentry *dentry) {
+  return 0;
+}
+
+int cinq_unlink(struct inode *dir, struct dentry *dentry) {
+  return 0;
+}
+
+int cinq_symlink(struct inode *dir, struct dentry *dentry,
+                 const char *symname) {
+  return 0;
+}
+
+int cinq_rmdir(struct inode *dir, struct dentry *dentry) {
+  return 0;
+}
+
+int cinq_rename(struct inode *old_dir, struct dentry *old_dentry,
+                struct inode *new_dir, struct dentry *new_dentry) {
+  return 0;
+}
+
+int cinq_setattr(struct dentry *dentry, struct iattr *attr) {
+  return 0;
 }
