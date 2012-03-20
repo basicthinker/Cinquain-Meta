@@ -52,17 +52,10 @@
     ((struct cinq_inode *)malloc(sizeof(struct cinq_inode)))
 #define cnode_mfree(p) (free(p))
 
+#define CURRENT_TIME ((struct timespec) { time(NULL), 0 })
+
 #endif // __KERNEL__
 
-static inline struct timespec current_time_() {
-#ifdef __KERNEL__
-  return current_kernel_time();
-#else
-  struct timespec ts;
-  ts.tv_sec = time(NULL);
-  return ts;
-#endif
-}
 
 #ifndef __KERNEL__
 // Private: those in kernel but not user-space
@@ -86,16 +79,13 @@ typedef pthread_rwlock_t rwlock_t;
 #define write_unlock(lock_p) (pthread_rwlock_unlock(lock_p))
 
 typedef pthread_rwlock_t spinlock_t;
+#define spin_lock_init(lock_p) (pthread_rwlock_init(lock_p, NULL))
 #define spin_lock(lock_p) (pthread_rwlock_wrlock(lock_p))
 #define spin_unlock(lock_p) (pthread_rwlock_unlock(lock_p))
 
 #define unlikely(cond) (cond)
 
-struct qstr { // include/linux/dcache.h
-  unsigned int hash;
-  unsigned int len;
-  const unsigned char *name;
-};
+#define CURRENT_TIME_SEC ((struct timespec) { time(NULL), 0 })
 
 static inline void * ERR_PTR(long error) { // include/linux/err.h
   return (void *) error;
@@ -141,17 +131,31 @@ static inline void * ERR_PTR(long error) { // include/linux/err.h
 #define ENAMETOOLONG 36 /* File name too long */
 #define EADDRNOTAVAIL 99 /* Cannot assign requested address */
 
+// linux/stat.h
+#define S_IFMT   00170000
+#define S_IFSOCK 0140000
+#define S_IFLNK  0120000
+#define S_IFREG  0100000
+#define S_IFBLK  0060000
+#define S_IFDIR  0040000
+#define S_IFCHR  0020000
+#define S_IFIFO  0010000
+#define S_ISUID  0004000
+#define S_ISGID  0002000
+#define S_ISVTX  0001000
+#define S_ISLNK(m)      (((m) & S_IFMT) == S_IFLNK)
+#define S_ISREG(m)      (((m) & S_IFMT) == S_IFREG)
+#define S_ISDIR(m)      (((m) & S_IFMT) == S_IFDIR)
+#define S_ISCHR(m)      (((m) & S_IFMT) == S_IFCHR)
+#define S_ISBLK(m)      (((m) & S_IFMT) == S_IFBLK)
+#define S_ISFIFO(m)     (((m) & S_IFMT) == S_IFIFO)
+#define S_ISSOCK(m)     (((m) & S_IFMT) == S_IFSOCK)
+
 #define MAX_NESTED_LINKS 6
 
 #include "vfs.h"
 
-/* Stub functions with user-space implementation */
-/* stub.c */
-extern struct dentry *d_splice_alias(struct inode *inode,
-                                     struct dentry *dentry);
-
 #endif // __KERNEL__
-
 
 
 /* Non-portability utilities */

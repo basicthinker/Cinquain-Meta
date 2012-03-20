@@ -13,6 +13,78 @@
 #ifndef CINQUAIN_META_VFS_H_
 #define CINQUAIN_META_VFS_H_
 
+// This is a partial header file depending on util.h.
+// util.h should be included instead of this file in most cases.
+
+#ifndef __KERNEL__
+
+// include/linux/fs.h
+/*
+ * Inode state bits.  Protected by inode->i_lock
+ *
+ * Three bits determine the dirty state of the inode, I_DIRTY_SYNC,
+ * I_DIRTY_DATASYNC and I_DIRTY_PAGES.
+ *
+ * Four bits define the lifetime of an inode.  Initially, inodes are I_NEW,
+ * until that flag is cleared.  I_WILL_FREE, I_FREEING and I_CLEAR are set at
+ * various stages of removing an inode.
+ *
+ * Two bits are used for locking and completion notification, I_NEW and I_SYNC.
+ *
+ * I_DIRTY_SYNC		Inode is dirty, but doesn't have to be written on
+ *			fdatasync().  i_atime is the usual cause.
+ * I_DIRTY_DATASYNC	Data-related inode changes pending. We keep track of
+ *			these changes separately from I_DIRTY_SYNC so that we
+ *			don't have to write inode on fdatasync() when only
+ *			mtime has changed in it.
+ * I_DIRTY_PAGES	Inode has dirty pages.  Inode itself may be clean.
+ * I_NEW		Serves as both a mutex and completion notification.
+ *			New inodes set I_NEW.  If two processes both create
+ *			the same inode, one of them will release its inode and
+ *			wait for I_NEW to be released before returning.
+ *			Inodes in I_WILL_FREE, I_FREEING or I_CLEAR state can
+ *			also cause waiting on I_NEW, without I_NEW actually
+ *			being set.  find_inode() uses this to prevent returning
+ *			nearly-dead inodes.
+ * I_WILL_FREE		Must be set when calling write_inode_now() if i_count
+ *			is zero.  I_FREEING must be set when I_WILL_FREE is
+ *			cleared.
+ * I_FREEING		Set when inode is about to be freed but still has dirty
+ *			pages or buffers attached or the inode itself is still
+ *			dirty.
+ * I_CLEAR		Added by end_writeback().  In this state the inode is clean
+ *			and can be destroyed.  Inode keeps I_FREEING.
+ *
+ *			Inodes that are I_WILL_FREE, I_FREEING or I_CLEAR are
+ *			prohibited for many purposes.  iget() must wait for
+ *			the inode to be completely released, then create it
+ *			anew.  Other functions will just ignore such inodes,
+ *			if appropriate.  I_NEW is used for waiting.
+ *
+ * I_SYNC		Synchonized write of dirty inode data.  The bits is
+ *			set during data writeback, and cleared with a wakeup
+ *			on the bit address once it is done.
+ */
+#define I_DIRTY_SYNC		(1 << 0)
+#define I_DIRTY_DATASYNC	(1 << 1)
+#define I_DIRTY_PAGES		(1 << 2)
+#define __I_NEW			3
+#define I_NEW			(1 << __I_NEW)
+#define I_WILL_FREE		(1 << 4)
+#define I_FREEING		(1 << 5)
+#define I_CLEAR			(1 << 6)
+#define __I_SYNC		7
+#define I_SYNC			(1 << __I_SYNC)
+#define I_REFERENCED		(1 << 8)
+
+#define I_DIRTY (I_DIRTY_SYNC | I_DIRTY_DATASYNC | I_DIRTY_PAGES)
+
+struct qstr { // include/linux/dcache.h
+  unsigned int hash;
+  unsigned int len;
+  const unsigned char *name;
+};
+
 struct writeback_control {
   // only for interface compatibility 
 };
@@ -364,111 +436,33 @@ struct file_operations {
                     loff_t len);
 };
 
+// stub.c
+/* Stub functions with user-space implementation */
+extern struct dentry *d_splice_alias(struct inode *inode,
+                                     struct dentry *dentry);
+extern unsigned int current_fsuid();
+extern unsigned int current_fsgid();
+
+// vfs.c
 /**
- * inode_init_always - perform inode structure intialisation
- * @sb: superblock inode belongs to
- * @inode: inode to initialise
+ *	new_inode 	- obtain an inode
+ *	@sb: superblock
  *
- * These are initializations that need to be done on every inode
- * allocation as the fields are not initialised by slab allocation.
+ *	Allocates a new inode for given superblock.
  */
-static inline int inode_init_always(struct super_block *sb, struct inode *inode)
-{
-  static const struct inode_operations empty_iops;
-  static const struct file_operations empty_fops;
-  // struct address_space *const mapping = &inode->i_data;
-  
-  inode->i_sb = sb;
-  inode->i_blkbits = sb->s_blocksize_bits;
-  inode->i_flags = 0;
-  // atomic_set(&inode->i_count, 1);
-  inode->i_op = &empty_iops;
-  inode->i_fop = &empty_fops;
-  inode->i_nlink = 1;
-  inode->i_uid = 0;
-  inode->i_gid = 0;
-  // atomic_set(&inode->i_writecount, 0);
-  inode->i_size = 0;
-  inode->i_blocks = 0;
-  inode->i_bytes = 0;
-  inode->i_generation = 0;
-  // #ifdef CONFIG_QUOTA
-  //   memset(&inode->i_dquot, 0, sizeof(inode->i_dquot));
-  // #endif
-  // inode->i_pipe = NULL;
-  // inode->i_bdev = NULL;
-  // inode->i_cdev = NULL;
-  inode->i_rdev = 0;
-  inode->dirtied_when = 0;
-  
-  // if (security_inode_alloc(inode))
-  //   goto out;
-  // spin_lock_init(&inode->i_lock);
-  // lockdep_set_class(&inode->i_lock, &sb->s_type->i_lock_key);
-  
-  // mutex_init(&inode->i_mutex);
-  // lockdep_set_class(&inode->i_mutex, &sb->s_type->i_mutex_key);
-  
-  // init_rwsem(&inode->i_alloc_sem);
-  // lockdep_set_class(&inode->i_alloc_sem, &sb->s_type->i_alloc_sem_key);
-  
-  // mapping->a_ops = &empty_aops;
-  // mapping->host = inode;
-  // mapping->flags = 0;
-  // mapping_set_gfp_mask(mapping, GFP_HIGHUSER_MOVABLE);
-  // mapping->assoc_mapping = NULL;
-  // mapping->backing_dev_info = &default_backing_dev_info;
-  // mapping->writeback_index = 0;
-  
-  /*
-   * If the block_device provides a backing_dev_info for client
-   * inodes then use that.  Otherwise the inode share the bdev's
-   * backing_dev_info.
-   */
-  // if (sb->s_bdev) {
-  //   struct backing_dev_info *bdi;
-  //
-  //   bdi = sb->s_bdev->bd_inode->i_mapping->backing_dev_info;
-  //   mapping->backing_dev_info = bdi;
-  // }
-  // inode->i_private = NULL;
-  // inode->i_mapping = mapping;
-  // #ifdef CONFIG_FS_POSIX_ACL
-  //   inode->i_acl = inode->i_default_acl = ACL_NOT_CACHED;
-  // #endif
-  
-  // #ifdef CONFIG_FSNOTIFY
-  //   inode->i_fsnotify_mask = 0;
-  // #endif
-  
-  // this_cpu_inc(nr_inodes);
-  
-  return 0;
-  //out:
-  //  return -ENOMEM;
-}
+extern struct inode *new_inode(struct super_block *sb);
 
-static inline struct inode *alloc_inode(struct super_block *sb)
-{
-	struct inode *inode;
-  
-	if (sb->s_op->alloc_inode)
-		inode = sb->s_op->alloc_inode(sb); // no specific alloc function
-	else
-		inode = inode_malloc(); // adjusted for user space
-  
-	if (!inode)
-		return NULL;
-  
-	if (unlikely(inode_init_always(sb, inode))) {
-		if (inode->i_sb->s_op->destroy_inode)
-			inode->i_sb->s_op->destroy_inode(inode);
-		else
-			inode_mfree(inode); // adjusted for user space
-		return NULL;
-	}
-  
-	return inode;
-}
+extern void mark_inode_dirty(struct inode *inode);
 
+extern void inode_inc_link_count(struct inode *inode);
+
+/**
+ * inode_init_owner - Init uid,gid,mode for new inode according to posix standards
+ * @inode: New inode
+ * @dir: Directory inode
+ * @mode: mode of the new inode
+ */
+extern void inode_init_owner(struct inode *inode, const struct inode *dir,
+                             mode_t mode);
+#endif // __KERNEL__
 #endif // CINQUAIN_META_VFS_H_

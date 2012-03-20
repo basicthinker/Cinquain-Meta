@@ -39,4 +39,14 @@ struct dentry *d_splice_alias(struct inode *inode,
   return dentry;
 }
 
+// Returns the current uid who is taking some file system operation
+unsigned int current_fsuid() {
+  // return current->cred->fsuid;
+  return 0;
+}
 
+// Returns the current gid who is taking some file system operation
+unsigned int current_fsgid() {
+  // return current->cred->fsuid;
+  return 0;
+}

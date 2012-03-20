@@ -23,3 +23,14 @@ const struct inode_operations cinq_dir_inode_operations = {
 	.rename		= cinq_rename,
 	.setattr	= cinq_setattr
 };
+
+const struct inode_operations cinq_file_inode_operations = {
+	.setattr	= cinq_setattr
+};
+
+const struct file_operations cinq_file_operations = {
+	.read     = cinq_read,
+	.write		= cinq_write,
+	.open     = cinq_open,
+	.release	= cinq_release_file
+};
