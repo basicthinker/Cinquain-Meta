@@ -72,35 +72,48 @@ static inline void print_cnode_tree(struct cinq_inode *root) {
   print_cnode_tree_(0, 1, root);
 }
 
-// Example for invoking cinq_mkdir and cinq_lookup
-static void make_dir_tree(struct cinq_fsnode *fs, struct inode *dir) {
+// Example for invoking cinq_mkdir
+static void make_dir_tree(struct cinq_fsnode *fs, struct dentry *root) {
   int i, j, k;
   char buffer[MAX_NAME_LEN + 1];
-  int mode = CINQ_MERGE << CINQ_MODE_SHIFT;
+  int mode = (CINQ_MERGE << CINQ_MODE_SHIFT) | S_IFDIR;
+  
+  // make three-layer dir tree
   for (i = 1; i <= CNODE_CHILDREN_; ++i) {
-    struct dentry den;
-    den.d_fsdata = (void *)fs->fs_id;
+    struct inode *dir = root->d_inode;
     sprintf(buffer, "%d", i);
-    den.d_name.name = (unsigned char *)buffer;
-    if (cinq_mkdir(dir, &den, mode)) {
+    struct qstr dname = {0, strlen(buffer), (unsigned char *)buffer};
+    struct dentry *den = d_alloc(root, &dname);
+    den->d_fsdata = (void *)fs->fs_id;
+    if (cinq_mkdir(dir, den, mode)) {
       DEBUG_("[Error@make_dir_tree] failed to make dir '%s' by %lx(%s).\n",
              buffer, fs->fs_id, fs->fs_name);
       return;
     }
-    struct dentry *sub_den = cinq_lookup(dir, &den, NULL);
+    
     for (j = 1; j <= CNODE_CHILDREN_; ++j) {
-      struct dentry den;
-      den.d_fsdata = (void *)fs->fs_id;
+      struct inode *subdir = den->d_inode;
       sprintf(buffer, "%d", j);
-      den.d_name.name = (unsigned char *)buffer;
-      if (cinq_mkdir(dir, &den, mode)) {
-        DEBUG_("[Error@make_dir_tree] failed to make dir '%s' by %lx(%s).\n",
+      struct qstr dname = {0, strlen(buffer), (unsigned char *)buffer};
+      struct dentry *subden = d_alloc(den, &dname);
+      subden->d_fsdata = (void *)fs->fs_id;
+      if (cinq_mkdir(subdir, subden, mode)) {
+        DEBUG_("[Error@make_dir_tree] failed to make sub-dir '%s' by %lx(%s).\n",
                buffer, fs->fs_id, fs->fs_name);
         return;
       }
       
       for (k = 1; k <= CNODE_CHILDREN_; ++k) {
-        
+        struct inode *subsubdir = subden->d_inode;
+        sprintf(buffer, "%d", k);
+        struct qstr dname = {0, strlen(buffer), (unsigned char *)buffer};
+        struct dentry *subsubden = d_alloc(subden, &dname);
+        den->d_fsdata = (void *)fs->fs_id;
+        if (cinq_mkdir(subsubdir, subsubden, mode)) {
+          DEBUG_("[Error@make_dir_tree] failed to make sub-sub-dir '%s' "
+                 "by %lx(%s).\n", buffer, fs->fs_id, fs->fs_name);
+          return;
+        }
       }
     }
   }

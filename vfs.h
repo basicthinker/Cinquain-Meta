@@ -197,12 +197,15 @@ struct inode {
   //  struct list_head	i_wb_list;	/* backing dev IO list */
   //  struct list_head	i_lru;		/* inode LRU list */
   //  struct list_head	i_sb_list;
+  
   //  union {
   //    struct list_head	i_dentry;
-  //    struct rcu_head		i_rcu;
+  //    struct rcu_head	i_rcu;
   //  };
+  struct list_head	i_dentry; // replaces the above
+  
 	unsigned long		i_ino;
-	//atomic_t		i_count;
+	// atomic_t		i_count;
 	unsigned int		i_nlink;
 	dev_t			i_rdev;
 	unsigned int		i_blkbits;
@@ -215,7 +218,7 @@ struct inode {
 	struct timespec		i_mtime;
 	struct timespec		i_ctime;
 	blkcnt_t		i_blocks;
-	unsigned short          i_bytes;
+	unsigned short    i_bytes;
   // struct rw_semaphore	i_alloc_sem;
 	const struct file_operations	*i_fop;	/* former ->i_op->default_file_ops */
 	struct file_lock	*i_flock;
@@ -253,13 +256,36 @@ struct inode {
 };
 
 struct dentry {
-  struct inode *d_inode;
-  struct dentry *parent;
-  struct qstr d_name;
-  void *d_fsdata;
+	/* RCU lookup touched fields */
+	unsigned int d_flags;		/* protected by d_lock */
+	// seqcount_t d_seq;		/* per dentry seqlock */
+	// struct hlist_bl_node d_hash;	/* lookup hash list */
+	struct dentry *d_parent;	/* parent directory */
+	struct qstr d_name;
+	struct inode *d_inode;		/* Where the name belongs to - NULL is
+                             * negative */
   
-  // Omits all dcache-related members.
-  // User-space implementation should provide independent dentry cache.
+  // Cinquain: just use in-memory inode names
+	// unsigned char d_iname[DNAME_INLINE_LEN];	/* small names */
+  
+	/* Ref lookup also touches following */
+	unsigned int d_count;		/* protected by d_lock */
+	spinlock_t d_lock;		/* per dentry lock */
+	const struct dentry_operations *d_op;
+	struct super_block *d_sb;	/* The root of the dentry tree */
+	unsigned long d_time;		/* used by d_revalidate */
+	void *d_fsdata;			/* fs-specific data */
+  
+	// struct list_head d_lru;		/* LRU list */
+	/*
+	 * d_child and d_rcu can share memory
+	 */
+  union {
+    struct list_head d_child;	/* child of parent list */
+  	// struct rcu_head d_rcu;
+  } d_u;
+  struct list_head d_subdirs;	/* our children */
+  struct list_head d_alias;	/* inode alias list */
 };
 
 struct path {
@@ -438,6 +464,8 @@ struct file_operations {
 
 // stub.c
 /* Stub functions with user-space implementation */
+extern struct dentry *d_alloc(struct dentry * parent, const struct qstr *name);
+extern void d_instantiate(struct dentry *dentry, struct inode * inode);
 extern struct dentry *d_splice_alias(struct inode *inode,
                                      struct dentry *dentry);
 extern unsigned int current_fsuid();

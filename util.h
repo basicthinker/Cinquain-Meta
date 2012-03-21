@@ -48,6 +48,10 @@
     ((struct inode *)malloc(sizeof(struct inode)))
 #define inode_mfree(p) (free(p))
 
+#define dentry_malloc() \
+    ((struct dentry *)malloc(sizeof(struct dentry)))
+#define dentry_mfree(p) (free(p))
+
 #define cnode_malloc() \
     ((struct cinq_inode *)malloc(sizeof(struct cinq_inode)))
 #define cnode_mfree(p) (free(p))
@@ -82,6 +86,11 @@ typedef pthread_rwlock_t spinlock_t;
 #define spin_lock_init(lock_p) (pthread_rwlock_init(lock_p, NULL))
 #define spin_lock(lock_p) (pthread_rwlock_wrlock(lock_p))
 #define spin_unlock(lock_p) (pthread_rwlock_unlock(lock_p))
+
+struct list_head {
+  struct list_head *next, *prev;
+};
+#include "list.h"
 
 #define unlikely(cond) (cond)
 

@@ -138,8 +138,9 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
   
   struct cinq_inode *parent = cnode_(dir);
   struct cinq_fsnode *fs = dentry->d_fsdata;
-  
   struct cinq_inode *child;
+  struct cinq_tag *tag;
+  
   char *name = (char *)dentry->d_name.name;
   if (dentry->d_name.len > MAX_NAME_LEN) {
     DEBUG_("[Error@cinq_mkdir] name is too long: %s\n", name);
@@ -152,8 +153,7 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
   if (child) {
     write_unlock(&parent->ci_children_lock);
     
-    struct cinq_tag *tag = NULL;
-    
+    tag = NULL;
     write_lock(&child->ci_tags_lock);
     HASH_FIND_PTR(child->ci_tags, &fs, tag);
     if (!tag) {
@@ -169,11 +169,12 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
     child = cnode_new_(parent);
     strcpy(child->ci_name, name);
     struct inode *inode = cinq_new_inode_(dir, mode, &dentry->d_name);
-    struct cinq_tag *tag = tag_new_(fs, child, CINQ_MERGE, inode);
+    tag = tag_new_(fs, child, CINQ_MERGE, inode);
     HASH_ADD_PTR(child->ci_tags, t_fs, tag);
     HASH_ADD_BY_STR(ci_child, parent->ci_children, ci_name, child);
     write_unlock(&parent->ci_children_lock);
   }
+  d_instantiate(dentry, tag->t_inode);
   return 0;
 }
 

@@ -16,6 +16,104 @@
 // Subject to user-space adjustment.
 
 /**
+ * d_alloc	-	allocate a dcache entry
+ * @parent: parent of entry to allocate
+ * @name: qstr of the name
+ *
+ * Allocates a dentry. It returns %NULL if there is insufficient memory
+ * available. On a success the dentry is returned. The name passed in is
+ * copied and the copy passed in may be reused after this call.
+ */
+
+struct dentry *d_alloc(struct dentry * parent, const struct qstr *name) {
+	struct dentry *dentry;
+	char *dname;
+  
+	dentry = dentry_malloc();
+	if (!dentry)
+		return NULL;
+  
+	dname = malloc(name->len + 1);
+  if (!dname) {
+    dentry_mfree(dentry); 
+    return NULL;
+  }	
+	dentry->d_name.name = (unsigned char *)dname;
+	dentry->d_name.len = name->len;
+	dentry->d_name.hash = name->hash;
+	memcpy(dname, name->name, name->len);
+	dname[name->len] = 0;
+  
+	dentry->d_count = 1;
+	dentry->d_flags = 0;
+	spin_lock_init(&dentry->d_lock);
+	// seqcount_init(&dentry->d_seq);
+	dentry->d_inode = NULL;
+	dentry->d_parent = NULL;
+	dentry->d_sb = NULL;
+	dentry->d_op = NULL;
+	dentry->d_fsdata = NULL;
+  // INIT_HLIST_BL_NODE(&dentry->d_hash);
+  // INIT_LIST_HEAD(&dentry->d_lru);
+  INIT_LIST_HEAD(&dentry->d_subdirs);
+  INIT_LIST_HEAD(&dentry->d_alias);
+  INIT_LIST_HEAD(&dentry->d_u.d_child);
+  
+	if (parent) {
+		spin_lock(&parent->d_lock);
+		/*
+		 * don't need child lock because it is not subject
+		 * to concurrency here
+		 */
+		
+    // __dget_dlock(parent);
+    parent->d_count++; // expands the above
+    
+		dentry->d_parent = parent;
+		dentry->d_sb = parent->d_sb;
+		// d_set_d_op(dentry, dentry->d_sb->s_d_op);
+		list_add(&dentry->d_u.d_child, &parent->d_subdirs);
+		spin_unlock(&parent->d_lock);
+	}
+  
+	// this_cpu_inc(nr_dentry);
+  
+	return dentry;
+}
+
+
+/**
+ * d_instantiate - fill in inode information for a dentry
+ * @entry: dentry to complete
+ * @inode: inode to attach to this dentry
+ *
+ * Fill in inode information in the entry.
+ *
+ * This turns negative dentries into productive full members
+ * of society.
+ *
+ * NOTE! This assumes that the inode count has been incremented
+ * (or otherwise set) by the caller to indicate that it is now
+ * in use by the dcache.
+ */
+void d_instantiate(struct dentry *dentry, struct inode * inode) {
+	if (inode) {
+		spin_lock(&inode->i_lock);
+    
+    // __d_instantiate(entry, inode);
+    // expanded as following
+    spin_lock(&dentry->d_lock);
+    list_add(&dentry->d_alias, &inode->i_dentry);
+    dentry->d_inode = inode;
+    // dentry_rcuwalk_barrier(dentry);
+    spin_unlock(&dentry->d_lock);
+    
+		spin_unlock(&inode->i_lock);
+  }
+	// security_d_instantiate(entry, inode);
+}
+
+/**
  * d_splice_alias - splice a disconnected dentry into the tree if one exists
  * @inode:  the inode which may have a disconnected dentry
  * @dentry: a negative dentry which we want to point to the inode.
@@ -34,9 +132,31 @@
 struct dentry *d_splice_alias(struct inode *inode,
                               struct dentry *dentry) {
   // Hook for user-space dentry cache implementation.
-  // The basic function is to attach the inode to the dentry.
-  dentry->d_inode = inode;
-  return dentry;
+  
+	// struct dentry *new = NULL;
+  //	if (inode && S_ISDIR(inode->i_mode)) {
+  //		spin_lock(&inode->i_lock);
+  //		new = __d_find_alias(inode, 1);
+  //		if (new) {
+  //			BUG_ON(!(new->d_flags & DCACHE_DISCONNECTED));
+  //			spin_unlock(&inode->i_lock);
+  //			d_move(new, dentry);
+  //			iput(inode);
+  //		} else {
+  //			/* already taking inode->i_lock, so d_add() by hand */
+  //			__d_instantiate(dentry, inode);
+  //			spin_unlock(&inode->i_lock);
+  //			d_rehash(dentry);
+  //		}
+  //	} else
+  //		d_add(dentry, inode);
+  //  }
+  // return new;
+
+  // simplified, only when no alias is found
+  d_instantiate(dentry, inode);
+  // d_rehash(entry); // requires user-space implementation
+	return NULL;
 }
 
 // Returns the current uid who is taking some file system operation
