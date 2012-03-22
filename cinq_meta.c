@@ -12,6 +12,20 @@
 
 #include "cinq_meta.h"
 
+const struct file_system_type cinqfs = {
+  .name = "rkfs",
+#ifdef __KERNEL__
+  .owner = THIS_MODULE,
+#endif
+  .mount = cinq_mount,
+  .kill_sb = cinq_kill_sb
+};
+
+const struct super_operations cinq_super_operations = {
+  .dirty_inode = cinq_dirty_inode,
+  .write_inode = cinq_write_inode
+};
+
 const struct inode_operations cinq_dir_inode_operations = {
 	.create		= cinq_create,
 	.lookup		= cinq_lookup,

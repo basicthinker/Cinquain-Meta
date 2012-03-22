@@ -104,12 +104,34 @@ struct iattr {
 	struct timespec	ia_ctime;
 };
 
+struct super_block;
+
+struct file_system_type {
+	const char *name;
+	int fs_flags;
+	struct dentry *(*mount) (struct file_system_type *, int,
+                           const char *, void *);
+	void (*kill_sb) (struct super_block *);
+	//  struct module *owner;
+	//  struct file_system_type * next;
+	//  struct list_head fs_supers;
+  
+  //	struct lock_class_key s_lock_key;
+  //	struct lock_class_key s_umount_key;
+  //	struct lock_class_key s_vfs_rename_key;
+  //  
+  //	struct lock_class_key i_lock_key;
+  //	struct lock_class_key i_mutex_key;
+  //	struct lock_class_key i_mutex_dir_key;
+  //	struct lock_class_key i_alloc_sem_key;
+};
+
 struct super_block {
   //	struct list_head	s_list;		/* Keep this first */
 	dev_t			s_dev;		/* search index; _not_ kdev_t */
 	unsigned char		s_dirt;
-	unsigned char		s_blocksize_bits;
-	unsigned long		s_blocksize;
+  //	unsigned char		s_blocksize_bits;
+  //	unsigned long		s_blocksize;
 	loff_t			s_maxbytes;	/* Max file size */
 	struct file_system_type	*s_type;
 	const struct super_operations	*s_op;
@@ -205,24 +227,24 @@ struct inode {
   struct list_head	i_dentry; // replaces the above
   
 	unsigned long		i_ino;
-	// atomic_t		i_count;
+	// atomic_t     i_count;
 	unsigned int		i_nlink;
-	dev_t			i_rdev;
+	dev_t           i_rdev;
 	unsigned int		i_blkbits;
-	u64			i_version;
-	loff_t			i_size;
+	u64             i_version;
+	loff_t          i_size;
   // #ifdef __NEED_I_SIZE_ORDERED
   // 	seqcount_t		i_size_seqcount;
   // #endif
 	struct timespec		i_atime;
 	struct timespec		i_mtime;
 	struct timespec		i_ctime;
-	blkcnt_t		i_blocks;
+	blkcnt_t          i_blocks;
 	unsigned short    i_bytes;
   // struct rw_semaphore	i_alloc_sem;
 	const struct file_operations	*i_fop;	/* former ->i_op->default_file_ops */
-	struct file_lock	*i_flock;
-  struct address_space	*i_mapping;
+	//  struct file_lock	*i_flock;
+  //  struct address_space	*i_mapping;
   //  struct address_space	i_data;
   //#ifdef CONFIG_QUOTA
   //	struct dquot		*i_dquot[MAXQUOTAS];
@@ -465,13 +487,21 @@ struct file_operations {
 // stub.c
 /* Stub functions with user-space implementation */
 extern struct dentry *d_alloc(struct dentry * parent, const struct qstr *name);
+
 extern void d_instantiate(struct dentry *dentry, struct inode * inode);
+
+extern struct dentry *dget(struct dentry *dentry);
+
 extern struct dentry *d_splice_alias(struct inode *inode,
                                      struct dentry *dentry);
 extern unsigned int current_fsuid();
 extern unsigned int current_fsgid();
 
 // vfs.c
+extern struct dentry *mount_nodev(struct file_system_type *fs_type,
+                                  int flags, void *data,
+                                  int (*fill_super)(struct super_block *,
+                                                    void *, int));
 /**
  *	new_inode 	- obtain an inode
  *	@sb: superblock

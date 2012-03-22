@@ -82,7 +82,8 @@ static void make_dir_tree(struct cinq_fsnode *fs, struct dentry *root) {
   for (i = 1; i <= CNODE_CHILDREN_; ++i) {
     struct inode *dir = root->d_inode;
     sprintf(buffer, "%d", i);
-    struct qstr dname = {0, strlen(buffer), (unsigned char *)buffer};
+    struct qstr dname =
+        { .name = (unsigned char *)buffer, .len = strlen(buffer) };
     struct dentry *den = d_alloc(root, &dname);
     den->d_fsdata = (void *)fs->fs_id;
     if (cinq_mkdir(dir, den, mode)) {
@@ -94,7 +95,8 @@ static void make_dir_tree(struct cinq_fsnode *fs, struct dentry *root) {
     for (j = 1; j <= CNODE_CHILDREN_; ++j) {
       struct inode *subdir = den->d_inode;
       sprintf(buffer, "%d", j);
-      struct qstr dname = {0, strlen(buffer), (unsigned char *)buffer};
+      struct qstr dname =
+          { .name = (unsigned char *)buffer, .len = strlen(buffer) };
       struct dentry *subden = d_alloc(den, &dname);
       subden->d_fsdata = (void *)fs->fs_id;
       if (cinq_mkdir(subdir, subden, mode)) {
@@ -106,7 +108,8 @@ static void make_dir_tree(struct cinq_fsnode *fs, struct dentry *root) {
       for (k = 1; k <= CNODE_CHILDREN_; ++k) {
         struct inode *subsubdir = subden->d_inode;
         sprintf(buffer, "%d", k);
-        struct qstr dname = {0, strlen(buffer), (unsigned char *)buffer};
+        struct qstr dname = 
+            { .name = (unsigned char *)buffer, .len = strlen(buffer) };
         struct dentry *subsubden = d_alloc(subden, &dname);
         den->d_fsdata = (void *)fs->fs_id;
         if (cinq_mkdir(subsubdir, subsubden, mode)) {

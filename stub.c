@@ -29,7 +29,7 @@ struct dentry *d_alloc(struct dentry * parent, const struct qstr *name) {
 	struct dentry *dentry;
 	char *dname;
   
-	dentry = dentry_malloc();
+	dentry = (struct dentry *)malloc(sizeof(struct dentry));
 	if (!dentry)
 		return NULL;
   
@@ -79,6 +79,24 @@ struct dentry *d_alloc(struct dentry * parent, const struct qstr *name) {
 	// this_cpu_inc(nr_dentry);
   
 	return dentry;
+}
+
+/**
+ *      dget -      get a reference to a dentry
+ *      @dentry: dentry to get a reference to
+ *
+ *      Given a dentry or %NULL pointer increment the reference count
+ *      if appropriate and return the dentry. A dentry will not be 
+ *      destroyed when it has references.
+ */
+struct dentry *dget(struct dentry *dentry) {
+  if (dentry) {
+    spin_lock(&dentry->d_lock);
+    // dget_dlock(dentry);
+    dentry->d_count++; // expands the above
+    spin_unlock(&dentry->d_lock);
+  }
+  return dentry;
 }
 
 

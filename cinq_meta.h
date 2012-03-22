@@ -93,6 +93,18 @@ struct cinq_inode {
 // No inode cache is necessary since cinq_inodes are in memory.
 // Therefore no public alloc/free-like functions are provided.
 
+
+/* super.c */
+
+extern struct dentry *cinq_mount (struct file_system_type *fs_type, int flags,
+                                  const char *dev_name, void *data);
+extern void cinq_kill_sb (struct super_block *sb);
+
+extern void cinq_dirty_inode(struct inode *inode);
+
+extern int cinq_write_inode(struct inode *inode, struct writeback_control *wbc);
+
+
 /* cnode.c */
 
 // @dentry: a negative dentry, namely whose d_inode is null.
@@ -105,13 +117,10 @@ struct cinq_inode {
 //    this parameter can be set null.
 extern struct dentry *cinq_lookup(struct inode *dir, struct dentry *dentry,
                                   struct nameidata *nameidata);
-
 extern int cinq_create(struct inode *dir, struct dentry *dentry,
                 int mode, struct nameidata *nameidata);
-
 extern int cinq_link(struct dentry *old_dentry, struct inode *dir,
               struct dentry *dentry);
-
 extern int cinq_unlink(struct inode *dir, struct dentry *dentry);
 
 extern int cinq_symlink(struct inode *dir, struct dentry *dentry, const char *symname);
@@ -120,7 +129,6 @@ extern int cinq_rmdir(struct inode *dir, struct dentry *dentry);
 
 extern int cinq_rename(struct inode *old_dir, struct dentry *old_dentry,
                 struct inode *new_dir, struct dentry *new_dentry);
-
 extern int cinq_setattr(struct dentry *dentry, struct iattr *attr);
 
 // @dentry: contains cinq_fsnode.fs_id in its d_fsdata, which specifies
@@ -132,15 +140,19 @@ extern int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode);
 // helper functions for user-space implementation
 extern void cnode_free_all(struct cinq_inode *root);
 
+
 /* file.c */
 extern int cinq_open(struct inode *inode, struct file *file);
+
 extern ssize_t cinq_read(struct file *filp, char *buf, size_t len,
                          loff_t *ppos);
 extern ssize_t cinq_write(struct file *filp, const char *buf, size_t len,
                           loff_t *ppos);
 extern int cinq_release_file (struct inode * inode, struct file * filp);
 
+
 /* cinq_meta.c */
+extern struct super_operations cinq_super_operations;
 extern const struct inode_operations cinq_dir_inode_operations;
 extern const struct inode_operations cinq_file_inode_operations;
 extern const struct file_operations cinq_file_operations;

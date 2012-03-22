@@ -44,14 +44,6 @@
     ((struct cinq_tag *)malloc(sizeof(struct cinq_tag)))
 #define tag_mfree(p) (free(p))
 
-#define inode_malloc() \
-    ((struct inode *)malloc(sizeof(struct inode)))
-#define inode_mfree(p) (free(p))
-
-#define dentry_malloc() \
-    ((struct dentry *)malloc(sizeof(struct dentry)))
-#define dentry_mfree(p) (free(p))
-
 #define cnode_malloc() \
     ((struct cinq_inode *)malloc(sizeof(struct cinq_inode)))
 #define cnode_mfree(p) (free(p))
@@ -140,6 +132,11 @@ static inline void * ERR_PTR(long error) { // include/linux/err.h
 #define ENAMETOOLONG 36 /* File name too long */
 #define EADDRNOTAVAIL 99 /* Cannot assign requested address */
 
+// linux/err.h
+#define MAX_ERRNO 4095
+#define IS_ERR_VALUE(x) unlikely((x) >= (unsigned long)-MAX_ERRNO)
+#define IS_ERR(ptr) (IS_ERR_VALUE((unsigned long)ptr))
+
 // linux/stat.h
 #define S_IFMT   00170000
 #define S_IFSOCK 0140000
@@ -159,6 +156,11 @@ static inline void * ERR_PTR(long error) { // include/linux/err.h
 #define S_ISBLK(m)      (((m) & S_IFMT) == S_IFBLK)
 #define S_ISFIFO(m)     (((m) & S_IFMT) == S_IFIFO)
 #define S_ISSOCK(m)     (((m) & S_IFMT) == S_IFSOCK)
+
+// linux/fs.h: the fs-independent mount-flags
+#define MS_ACTIVE       (1<<30)
+
+#define MAX_LFS_FILESIZE 0x7fffffffffffffffUL
 
 #define MAX_NESTED_LINKS 6
 

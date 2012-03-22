@@ -16,6 +16,117 @@
 
 #include "util.h"
 
+// fs/super.c
+/**
+ *	alloc_super	-	create new superblock
+ *	@type:	filesystem type superblock should belong to
+ *
+ *	Allocates and initializes a new &struct super_block.  alloc_super()
+ *	returns a pointer new superblock or %NULL if allocation had failed.
+ */
+static struct super_block *alloc_super_(struct file_system_type *type)
+{
+	struct super_block *s = malloc(sizeof(struct super_block));
+	static const struct super_operations default_op;
+  
+	if (s) {
+  //		if (security_sb_alloc(s)) {
+  //			kfree(s);
+  //			s = NULL;
+  //			goto out;
+  //		}
+  //#ifdef CONFIG_SMP
+  //		s->s_files = alloc_percpu(struct list_head);
+  //		if (!s->s_files) {
+  //			security_sb_free(s);
+  //			kfree(s);
+  //			s = NULL;
+  //			goto out;
+  //		} else {
+  //			int i;
+  //      
+  //			for_each_possible_cpu(i)
+  //      INIT_LIST_HEAD(per_cpu_ptr(s->s_files, i));
+  //		}
+  //#else
+  //		INIT_LIST_HEAD(&s->s_files);
+  //#endif
+  //		s->s_bdi = &default_backing_dev_info;
+  //		INIT_LIST_HEAD(&s->s_instances);
+  //		INIT_HLIST_BL_HEAD(&s->s_anon);
+  //		INIT_LIST_HEAD(&s->s_inodes);
+  //		INIT_LIST_HEAD(&s->s_dentry_lru);
+  //		init_rwsem(&s->s_umount);
+  //		mutex_init(&s->s_lock);
+  //		lockdep_set_class(&s->s_umount, &type->s_umount_key);
+  //		/*
+  //		 * The locking rules for s_lock are up to the
+  //		 * filesystem. For example ext3fs has different
+  //		 * lock ordering than usbfs:
+  //		 */
+  //		lockdep_set_class(&s->s_lock, &type->s_lock_key);
+  //		/*
+  //		 * sget() can have s_umount recursion.
+  //		 *
+  //		 * When it cannot find a suitable sb, it allocates a new
+  //		 * one (this one), and tries again to find a suitable old
+  //		 * one.
+  //		 *
+  //		 * In case that succeeds, it will acquire the s_umount
+  //		 * lock of the old one. Since these are clearly distrinct
+  //		 * locks, and this object isn't exposed yet, there's no
+  //		 * risk of deadlocks.
+  //		 *
+  //		 * Annotate this by putting this lock in a different
+  //		 * subclass.
+  //		 */
+  //		down_write_nested(&s->s_umount, SINGLE_DEPTH_NESTING);
+		s->s_count = 1;
+  //		atomic_set(&s->s_active, 1);
+  //		mutex_init(&s->s_vfs_rename_mutex);
+  //		lockdep_set_class(&s->s_vfs_rename_mutex, &type->s_vfs_rename_key);
+  //		mutex_init(&s->s_dquot.dqio_mutex);
+  //		mutex_init(&s->s_dquot.dqonoff_mutex);
+  //		init_rwsem(&s->s_dquot.dqptr_sem);
+  //		init_waitqueue_head(&s->s_wait_unfrozen);
+		s->s_maxbytes = ((1UL<<31) - 1); // MAX_NON_LFS;
+		s->s_op = &default_op;
+		s->s_time_gran = 1000000000;
+	}
+  //out:
+	return s;
+}
+
+
+struct dentry *mount_nodev(struct file_system_type *fs_type,
+                           int flags, void *data,
+                           int (*fill_super)(struct super_block *, void *, int))
+{
+	int error;
+	// struct super_block *s = sget(fs_type, NULL, set_anon_super, NULL);
+  // expanded as following
+  struct super_block *s = alloc_super_(fs_type);
+  // set_anon_super(s, data);
+  s->s_type = fs_type;
+  strlcpy(s->s_id, fs_type->name, sizeof(s->s_id));
+  //  list_add_tail(&s->s_list, &super_blocks);
+  //  list_add(&s->s_instances, &type->fs_supers);
+  
+	if (IS_ERR(s))
+		return (void *)s;
+  
+	s->s_flags = flags;
+  
+	error = fill_super(s, data, flags); // & MS_SILENT ? 1 : 0);
+	if (error) {
+  //		deactivate_locked_super(s);
+		return ERR_PTR(error);
+	}
+	s->s_flags |= MS_ACTIVE;
+	return dget(s->s_root);
+}
+
+
 // fs/inode.c
 /**
  * inode_init_always - perform inode structure intialisation
@@ -101,6 +212,7 @@ static inline int inode_init_always_(struct super_block *sb, struct inode *inode
   //  return -ENOMEM;
 }
 
+
 // fs/inode.c
 static inline struct inode *alloc_inode_(struct super_block *sb)
 {
@@ -109,7 +221,7 @@ static inline struct inode *alloc_inode_(struct super_block *sb)
 	if (sb->s_op->alloc_inode)
 		inode = sb->s_op->alloc_inode(sb); // no specific alloc function
 	else
-		inode = inode_malloc(); // adjusted for user space
+		inode = (struct inode *)malloc(sizeof(struct inode));
   
 	if (!inode)
 		return NULL;
@@ -118,12 +230,34 @@ static inline struct inode *alloc_inode_(struct super_block *sb)
 		if (inode->i_sb->s_op->destroy_inode)
 			inode->i_sb->s_op->destroy_inode(inode);
 		else
-			inode_mfree(inode); // adjusted for user space
+			free(inode); // adjusted for user space
 		return NULL;
 	}
   
 	return inode;
 }
+
+/**
+ *	new_inode 	- obtain an inode
+ *	@sb: superblock
+ *
+ *	Allocates a new inode for given superblock.
+ */
+struct inode *new_inode(struct super_block *sb) {
+	struct inode *inode;
+  
+	// spin_lock_prefetch(&inode_sb_list_lock);
+  
+	inode = alloc_inode_(sb);
+	if (inode) {
+		spin_lock(&inode->i_lock);
+		inode->i_state = 0;
+		spin_unlock(&inode->i_lock);
+		// inode_sb_list_add(inode);
+	}
+	return inode;
+}
+
 
 // fs/fs-writeback.c
 /**
@@ -168,100 +302,79 @@ static inline void mark_inode_dirty_(struct inode *inode, int flags)
 	}
   
   return; // truncate the following
-  //	/*
-  //	 * make sure that changes are seen by all cpus before we test i_state
-  //	 * -- mikulas
-  //	 */
-  //	smp_mb();
-  //  
-  //	/* avoid the locking if we can */
-  //	if ((inode->i_state & flags) == flags)
-  //		return;
-  //  
-  //	if (unlikely(block_dump))
-  //		block_dump___mark_inode_dirty(inode);
-  //  
-  //	spin_lock(&inode->i_lock);
-  //	if ((inode->i_state & flags) != flags) {
-  //		const int was_dirty = inode->i_state & I_DIRTY;
-  //    
-  //		inode->i_state |= flags;
-  //    
-  //		/*
-  //		 * If the inode is being synced, just update its dirty state.
-  //		 * The unlocker will place the inode on the appropriate
-  //		 * superblock list, based upon its state.
-  //		 */
-  //		if (inode->i_state & I_SYNC)
-  //			goto out_unlock_inode;
-  //    
-  //		/*
-  //		 * Only add valid (hashed) inodes to the superblock's
-  //		 * dirty list.  Add blockdev inodes as well.
-  //		 */
-  //		if (!S_ISBLK(inode->i_mode)) {
-  //			if (inode_unhashed(inode))
-  //				goto out_unlock_inode;
-  //		}
-  //		if (inode->i_state & I_FREEING)
-  //			goto out_unlock_inode;
-  //    
-  //		/*
-  //		 * If the inode was already on b_dirty/b_io/b_more_io, don't
-  //		 * reposition it (that would break b_dirty time-ordering).
-  //		 */
-  //		if (!was_dirty) {
-  //			bool wakeup_bdi = false;
-  //			bdi = inode_to_bdi(inode);
-  //      
-  //			if (bdi_cap_writeback_dirty(bdi)) {
-  //				WARN(!test_bit(BDI_registered, &bdi->state),
-  //				     "bdi-%s not registered\n", bdi->name);
-  //        
-  //				/*
-  //				 * If this is the first dirty inode for this
-  //				 * bdi, we have to wake-up the corresponding
-  //				 * bdi thread to make sure background
-  //				 * write-back happens later.
-  //				 */
-  //				if (!wb_has_dirty_io(&bdi->wb))
-  //					wakeup_bdi = true;
-  //			}
-  //      
-  //			spin_unlock(&inode->i_lock);
-  //			spin_lock(&inode_wb_list_lock);
-  //			inode->dirtied_when = jiffies;
-  //			list_move(&inode->i_wb_list, &bdi->wb.b_dirty);
-  //			spin_unlock(&inode_wb_list_lock);
-  //      
-  //			if (wakeup_bdi)
-  //				bdi_wakeup_thread_delayed(bdi);
-  //			return;
-  //		}
-  //	}
-  //out_unlock_inode:
-  //	spin_unlock(&inode->i_lock);
-}
-
-/**
- *	new_inode 	- obtain an inode
- *	@sb: superblock
- *
- *	Allocates a new inode for given superblock.
- */
-struct inode *new_inode(struct super_block *sb) {
-	struct inode *inode;
-  
-	// spin_lock_prefetch(&inode_sb_list_lock);
-  
-	inode = alloc_inode_(sb);
-	if (inode) {
-		spin_lock(&inode->i_lock);
-		inode->i_state = 0;
-		spin_unlock(&inode->i_lock);
-		// inode_sb_list_add(inode);
-	}
-	return inode;
+          //	/*
+          //	 * make sure that changes are seen by all cpus before we test i_state
+          //	 * -- mikulas
+          //	 */
+          //	smp_mb();
+          //  
+          //	/* avoid the locking if we can */
+          //	if ((inode->i_state & flags) == flags)
+          //		return;
+          //  
+          //	if (unlikely(block_dump))
+          //		block_dump___mark_inode_dirty(inode);
+          //  
+          //	spin_lock(&inode->i_lock);
+          //	if ((inode->i_state & flags) != flags) {
+          //		const int was_dirty = inode->i_state & I_DIRTY;
+          //    
+          //		inode->i_state |= flags;
+          //    
+          //		/*
+          //		 * If the inode is being synced, just update its dirty state.
+          //		 * The unlocker will place the inode on the appropriate
+          //		 * superblock list, based upon its state.
+          //		 */
+          //		if (inode->i_state & I_SYNC)
+          //			goto out_unlock_inode;
+          //    
+          //		/*
+          //		 * Only add valid (hashed) inodes to the superblock's
+          //		 * dirty list.  Add blockdev inodes as well.
+          //		 */
+          //		if (!S_ISBLK(inode->i_mode)) {
+          //			if (inode_unhashed(inode))
+          //				goto out_unlock_inode;
+          //		}
+          //		if (inode->i_state & I_FREEING)
+          //			goto out_unlock_inode;
+          //    
+          //		/*
+          //		 * If the inode was already on b_dirty/b_io/b_more_io, don't
+          //		 * reposition it (that would break b_dirty time-ordering).
+          //		 */
+          //		if (!was_dirty) {
+          //			bool wakeup_bdi = false;
+          //			bdi = inode_to_bdi(inode);
+          //      
+          //			if (bdi_cap_writeback_dirty(bdi)) {
+          //				WARN(!test_bit(BDI_registered, &bdi->state),
+          //				     "bdi-%s not registered\n", bdi->name);
+          //        
+          //				/*
+          //				 * If this is the first dirty inode for this
+          //				 * bdi, we have to wake-up the corresponding
+          //				 * bdi thread to make sure background
+          //				 * write-back happens later.
+          //				 */
+          //				if (!wb_has_dirty_io(&bdi->wb))
+          //					wakeup_bdi = true;
+          //			}
+          //      
+          //			spin_unlock(&inode->i_lock);
+          //			spin_lock(&inode_wb_list_lock);
+          //			inode->dirtied_when = jiffies;
+          //			list_move(&inode->i_wb_list, &bdi->wb.b_dirty);
+          //			spin_unlock(&inode_wb_list_lock);
+          //      
+          //			if (wakeup_bdi)
+          //				bdi_wakeup_thread_delayed(bdi);
+          //			return;
+          //		}
+          //	}
+          //out_unlock_inode:
+          //	spin_unlock(&inode->i_lock);
 }
 
 void mark_inode_dirty(struct inode *inode) {
