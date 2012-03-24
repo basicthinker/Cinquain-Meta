@@ -183,6 +183,9 @@ static inline void * ERR_PTR(long error) { // include/linux/err.h
 #define FILE_HASH_WIDTH 16 // bytes
 #define MAX_NAME_LEN 255 // max value
 
+// reference to include/linux/fs.h
+#define CINQ_ROOT_FL 0x10000000 // root inode that belongs to NONE file system
+
 #define HASH_FIND_BY_STR(hh, head, findstr, out) \
     HASH_FIND(hh, head, findstr, strlen(findstr), out)
 #define HASH_ADD_BY_STR(hh, head, strfield, add) \

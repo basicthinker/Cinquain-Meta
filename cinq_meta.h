@@ -138,7 +138,8 @@ extern int cinq_setattr(struct dentry *dentry, struct iattr *attr);
 extern int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode);
 
 // helper functions
-extern struct inode *cnode_make_tree(void);
+extern struct inode *cnode_make_tree(struct super_block *sb);
+
 extern void cnode_free_all(struct cinq_inode *root);
 
 

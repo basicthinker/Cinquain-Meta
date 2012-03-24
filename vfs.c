@@ -226,7 +226,7 @@ static inline struct inode *alloc_inode_(struct super_block *sb)
 	if (!inode)
 		return NULL;
   
-	if (unlikely(inode_init_always_(sb, inode))) {
+	if (inode_init_always_(sb, inode)) {
 		if (inode->i_sb->s_op->destroy_inode)
 			inode->i_sb->s_op->destroy_inode(inode);
 		else

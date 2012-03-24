@@ -131,6 +131,18 @@ void d_instantiate(struct dentry *dentry, struct inode * inode) {
 	// security_d_instantiate(entry, inode);
 }
 
+
+/* DCACHE_DISCONNECTED
+ * This dentry is possibly not currently connected to the dcache tree, in
+ * which case its parent will either be itself, or will have this flag as
+ * well.  nfsd will not use a dentry with this bit set, but will first
+ * endeavour to clear the bit either by discovering that it is connected,
+ * or by performing lookup operations.   Any filesystem which supports
+ * nfsd_operations MUST have a lookup function which, if it finds a
+ * directory inode with a DCACHE_DISCONNECTED dentry, will d_move that
+ * dentry into place and return that dentry rather than the passed one,
+ * typically using d_splice_alias. */
+
 /**
  * d_splice_alias - splice a disconnected dentry into the tree if one exists
  * @inode:  the inode which may have a disconnected dentry
@@ -175,6 +187,11 @@ struct dentry *d_splice_alias(struct inode *inode,
   d_instantiate(dentry, inode);
   // d_rehash(entry); // requires user-space implementation
 	return NULL;
+}
+
+// Invoked when super block is killed
+void d_genocide(struct dentry *root) {
+  
 }
 
 // Returns the current uid who is taking some file system operation

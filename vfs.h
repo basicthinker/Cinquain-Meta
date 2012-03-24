@@ -499,6 +499,8 @@ extern struct dentry *dget(struct dentry *dentry);
 
 extern struct dentry *d_splice_alias(struct inode *inode,
                                      struct dentry *dentry);
+extern void d_genocide(struct dentry *root);
+
 extern unsigned int current_fsuid(void);
 
 extern unsigned int current_fsgid(void);

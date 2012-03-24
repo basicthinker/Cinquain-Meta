@@ -22,7 +22,7 @@ static int cinq_fill_super_(struct super_block *sb, void *data, int silent) {
 	sb->s_op = &cinq_super_operations;
 	sb->s_time_gran	= 1;
   
-	inode = cnode_make_tree();
+	inode = cnode_make_tree(sb);
 	if (!inode) {
 		return -ENOMEM;
 	}
@@ -52,7 +52,8 @@ struct dentry *cinq_mount (struct file_system_type *fs_type, int flags,
 }
 
 void cinq_kill_sb (struct super_block *sb) {
-  
+  cnode_free_all((struct cinq_inode *)sb->s_root->d_inode->i_ino);
+  d_genocide(sb->s_root);
 }
 
 void cinq_dirty_inode(struct inode *inode) {

@@ -12,11 +12,16 @@
 
 #include "cinq_meta.h"
 
+static inline int is_root_inode(struct inode *inode) {
+  return inode->i_flags & CINQ_ROOT_FL;
+}
+
 static inline int cnode_is_root_(struct cinq_inode *cnode) {
   return cnode->ci_parent == cnode;
 }
 
-// Retrieves cinq_inode pointer from inode
+// Retrieves cinq_inode pointer from inode.
+// NOT applicable to root inode.
 static inline struct cinq_inode *cnode_(const struct inode *inode) {
   return ((struct cinq_tag *)inode->i_ino)->t_host;
 }
@@ -51,6 +56,7 @@ static inline void tag_free_(struct cinq_tag *tag) {
   tag_mfree(tag);
 }
 
+// @parent NULL for root cnode
 static struct cinq_inode *cnode_new_(struct cinq_inode *parent) {
   
   struct cinq_inode *cnode = cnode_malloc();
@@ -151,12 +157,36 @@ static struct inode *cinq_new_inode_(struct inode *dir, int mode,
   return inode;
 }
 
-struct inode *cnode_make_tree() {
-  return NULL;
+struct inode *cnode_make_tree(struct super_block *sb) {
+  struct cinq_inode *croot = cnode_new_(NULL);
+  
+  // Construct a root inode independant of any file system
+  struct inode * iroot = new_inode(sb);
+  if (!iroot) {
+    return ERR_PTR(-ENOMEM);
+  }
+  iroot->i_ino = (unsigned long)croot; // only for root inode
+  iroot->i_uid = 0;
+  iroot->i_gid = 0;
+  iroot->i_mode |= S_IFDIR;
+  iroot->i_flags |= CINQ_ROOT_FL;
+  iroot->i_blocks = 0;
+  iroot->i_mtime = iroot->i_atime = iroot->i_ctime = CURRENT_TIME;
+  // insert_inode_hash(inode);
+  iroot->i_op = &cinq_dir_inode_operations;
+  
+  struct cinq_tag *tag = tag_new_(0, croot, CINQ_OVERWR, iroot);
+  HASH_ADD_PTR(croot->ci_tags, t_fs, tag);
+  return iroot;
 }
 
 int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
   inode_inc_link_count(dir);
+  
+  if (is_root_inode(dir)) { // registers new file system node
+    
+    return 0;
+  }
   
   struct cinq_inode *parent = cnode_(dir);
   struct cinq_fsnode *fs = dentry->d_fsdata;
