@@ -11,35 +11,39 @@
 static int cinq_fill_super_(struct super_block *sb, void *data, int silent) {
   struct inode *inode = NULL;
 	struct dentry *root;
-	int err;
+  // int err;
+  // save_mount_options(sb, data);
+	// err = cinq_parse_options(data, &fsi->mount_opts);
   
-	save_mount_options(sb, data);
-  
-	err = ramfs_parse_options(data, &fsi->mount_opts);
-	if (err)
-		goto fail;
-  
-	sb->s_maxbytes		= MAX_LFS_FILESIZE;
-  //	sb->s_blocksize		= PAGE_CACHE_SIZE;
-  //	sb->s_blocksize_bits	= PAGE_CACHE_SHIFT;
-	sb->s_magic	= RAMFS_MAGIC;
+	sb->s_maxbytes = MAX_LFS_FILESIZE;
+  sb->s_blocksize	= PAGE_CACHE_SIZE;
+  sb->s_blocksize_bits = PAGE_CACHE_SHIFT;
+	sb->s_magic	= CINQ_MAGIC;
 	sb->s_op = &cinq_super_operations;
 	sb->s_time_gran	= 1;
   
-	inode = cinq_get_inode(sb, NULL, S_IFDIR, 0);
+	inode = cnode_make_tree();
 	if (!inode) {
-		err = -ENOMEM;
-		goto fail;
+		return -ENOMEM;
 	}
   
-	root = d_alloc_root(inode);
+	// root = d_alloc_root(inode); // expanded as following
+  static const struct qstr name = { .name = (unsigned char *)"/", .len = 1 };
+  root = d_alloc(NULL, &name);
+  if (root) {
+    root->d_sb = inode->i_sb;
+    // d_set_d_op(root, root->d_sb->s_d_op);
+    root->d_parent = root;
+    d_instantiate(root, inode);
+  }
+  
 	sb->s_root = root;
 	if (!root) {
-		err = -ENOMEM;
-		goto fail;
+		return -ENOMEM;
 	}
-  
-	return 0;
+
+  // iput(inode);
+  return 0;
 }
 
 struct dentry *cinq_mount (struct file_system_type *fs_type, int flags,

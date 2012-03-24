@@ -137,7 +137,8 @@ extern int cinq_setattr(struct dentry *dentry, struct iattr *attr);
 // @mode: the left most 2 bits denote inheritance type
 extern int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode);
 
-// helper functions for user-space implementation
+// helper functions
+extern struct inode *cnode_make_tree(void);
 extern void cnode_free_all(struct cinq_inode *root);
 
 
@@ -152,7 +153,7 @@ extern int cinq_release_file (struct inode * inode, struct file * filp);
 
 
 /* cinq_meta.c */
-extern struct super_operations cinq_super_operations;
+extern const struct super_operations cinq_super_operations;
 extern const struct inode_operations cinq_dir_inode_operations;
 extern const struct inode_operations cinq_file_inode_operations;
 extern const struct file_operations cinq_file_operations;

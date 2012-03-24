@@ -26,6 +26,12 @@
 #include <string.h>
 #include <pthread.h>
 #include <time.h>
+#include "atomic.h"
+
+// include/linux/pagemap.h
+#define PAGE_CACHE_SHIFT        13 // 8KB
+#define PAGE_CACHE_SIZE         ((uint64_t)1 << PAGE_CACHE_SHIFT)
+#define PAGE_CACHE_MASK         (~(PAGE_SIZE - 1))
 
 #define LOG(...) (fprintf(stdout, __VA_ARGS__))
 #ifdef CINQ_DEBUG
@@ -173,6 +179,7 @@ static inline void * ERR_PTR(long error) { // include/linux/err.h
 
 #include "uthash.h"
 
+#define CINQ_MAGIC 0x3122
 #define FILE_HASH_WIDTH 16 // bytes
 #define MAX_NAME_LEN 255 // max value
 

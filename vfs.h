@@ -130,8 +130,8 @@ struct super_block {
   //	struct list_head	s_list;		/* Keep this first */
 	dev_t			s_dev;		/* search index; _not_ kdev_t */
 	unsigned char		s_dirt;
-  //	unsigned char		s_blocksize_bits;
-  //	unsigned long		s_blocksize;
+  unsigned char		s_blocksize_bits;
+  unsigned long		s_blocksize;
 	loff_t			s_maxbytes;	/* Max file size */
 	struct file_system_type	*s_type;
 	const struct super_operations	*s_op;
@@ -227,7 +227,7 @@ struct inode {
   struct list_head	i_dentry; // replaces the above
   
 	unsigned long		i_ino;
-	// atomic_t     i_count;
+  //	atomic_t        i_count;
 	unsigned int		i_nlink;
 	dev_t           i_rdev;
 	unsigned int		i_blkbits;
@@ -293,7 +293,7 @@ struct dentry {
 	/* Ref lookup also touches following */
 	unsigned int d_count;		/* protected by d_lock */
 	spinlock_t d_lock;		/* per dentry lock */
-	const struct dentry_operations *d_op;
+  //	const struct dentry_operations *d_op;
 	struct super_block *d_sb;	/* The root of the dentry tree */
 	unsigned long d_time;		/* used by d_revalidate */
 	void *d_fsdata;			/* fs-specific data */
@@ -394,10 +394,10 @@ struct super_operations {
 	// int (*show_devname)(struct seq_file *, struct vfsmount *);
 	// int (*show_path)(struct seq_file *, struct vfsmount *);
 	// int (*show_stats)(struct seq_file *, struct vfsmount *);
-#ifdef CONFIG_QUOTA
-	ssize_t (*quota_read)(struct super_block *, int, char *, size_t, loff_t);
-	ssize_t (*quota_write)(struct super_block *, int, const char *, size_t, loff_t);
-#endif
+  //#ifdef CONFIG_QUOTA
+  //	ssize_t (*quota_read)(struct super_block *, int, char *, size_t, loff_t);
+  //	ssize_t (*quota_write)(struct super_block *, int, const char *, size_t, loff_t);
+  //#endif
 	// int (*bdev_try_to_free_page)(struct super_block*, struct page*, gfp_t);
 };
 
@@ -484,6 +484,11 @@ struct file_operations {
                     loff_t len);
 };
 
+static inline void inc_nlink(struct inode *inode) {
+  inode->i_nlink++;
+}
+
+
 // stub.c
 /* Stub functions with user-space implementation */
 extern struct dentry *d_alloc(struct dentry * parent, const struct qstr *name);
@@ -494,8 +499,10 @@ extern struct dentry *dget(struct dentry *dentry);
 
 extern struct dentry *d_splice_alias(struct inode *inode,
                                      struct dentry *dentry);
-extern unsigned int current_fsuid();
-extern unsigned int current_fsgid();
+extern unsigned int current_fsuid(void);
+
+extern unsigned int current_fsgid(void);
+
 
 // vfs.c
 extern struct dentry *mount_nodev(struct file_system_type *fs_type,

@@ -35,7 +35,7 @@ struct dentry *d_alloc(struct dentry * parent, const struct qstr *name) {
   
 	dname = malloc(name->len + 1);
   if (!dname) {
-    dentry_mfree(dentry); 
+    free(dentry); 
     return NULL;
   }	
 	dentry->d_name.name = (unsigned char *)dname;
@@ -51,7 +51,7 @@ struct dentry *d_alloc(struct dentry * parent, const struct qstr *name) {
 	dentry->d_inode = NULL;
 	dentry->d_parent = NULL;
 	dentry->d_sb = NULL;
-	dentry->d_op = NULL;
+	// dentry->d_op = NULL;
 	dentry->d_fsdata = NULL;
   // INIT_HLIST_BL_NODE(&dentry->d_hash);
   // INIT_LIST_HEAD(&dentry->d_lru);

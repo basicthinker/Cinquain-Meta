@@ -114,8 +114,8 @@ void cnode_free_all(struct cinq_inode *root) {
   cnode_free_(root);
 }
 
-static inline struct inode *cinq_new_inode_(struct inode *dir, int mode,
-                                            const struct qstr *qstr) {
+static struct inode *cinq_new_inode_(struct inode *dir, int mode,
+                             const struct qstr *qstr) {
   struct super_block *sb = dir->i_sb;
   struct inode * inode = new_inode(sb);
   if (!inode) {
@@ -127,10 +127,32 @@ static inline struct inode *cinq_new_inode_(struct inode *dir, int mode,
   inode->i_blocks = 0;
   inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
   // insert_inode_hash(inode);
-  inode->i_op = &cinq_file_inode_operations;
-  inode->i_fop = &cinq_file_operations;
+  switch (mode & S_IFMT) {
+		case S_IFREG:
+			inode->i_op = &cinq_file_inode_operations;
+			inode->i_fop = &cinq_file_operations;
+			break;
+		case S_IFDIR:
+			inode->i_op = &cinq_dir_inode_operations;
+      //	inode->i_fop = &simple_dir_operations;
+			/* directory inodes start off with i_nlink == 2 (for "." entry) */
+			inc_nlink(inode);
+			break;
+		case S_IFLNK:
+      //  inode->i_op = &page_symlink_inode_operations;
+			break;
+    default:
+			DEBUG_("[Warning@cinq_new_inode] mode not matched: %s under %p.\n",
+             qstr->name, dir);
+			break;
+  }
+
   mark_inode_dirty(inode);
   return inode;
+}
+
+struct inode *cnode_make_tree() {
+  return NULL;
 }
 
 int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {

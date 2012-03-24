@@ -382,11 +382,8 @@ void mark_inode_dirty(struct inode *inode) {
 }
 
 void inode_inc_link_count(struct inode *inode) {
-  // inc_nlink(inode);
-  inode->i_nlink++; // expands the above
-  
-  //mark_inode_dirty(inode);
-  mark_inode_dirty_(inode, I_DIRTY); // expands the above
+  inc_nlink(inode);
+  mark_inode_dirty(inode);
 }
 
 /**
