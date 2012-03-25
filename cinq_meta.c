@@ -13,7 +13,7 @@
 #include "cinq_meta.h"
 
 const struct file_system_type cinqfs = {
-  .name = "rkfs",
+  .name = "cinqfs",
 #ifdef __KERNEL__
   .owner = THIS_MODULE,
 #endif

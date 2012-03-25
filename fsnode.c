@@ -45,11 +45,13 @@ struct cinq_fsnode *fsnode_new(const char *name, struct cinq_fsnode *parent) {
   } else {
     fsnode->fs_parent = fsnode; // denotes root
   }
+  fsnode->fs_root = NULL; // filled after registeration
   fsnode->fs_children = NULL; // required by uthash
   return fsnode;
 }
 
 void fsnode_free(struct cinq_fsnode *fsnode) {
+  d_genocide(fsnode->fs_root);
   if (fsnode->fs_children) {
     DEBUG_("[Warning@fsnode_free] failed to delete fsnode %lx(%s) "
            "who still has children.\n", fsnode->fs_id, fsnode->fs_name);
@@ -75,8 +77,8 @@ void fsnode_free_all(struct cinq_fsnode *fsnode) {
 void fsnode_move(struct cinq_fsnode *child,
                  struct cinq_fsnode *new_parent) {
   if (fsnode_ancestor_(child, new_parent)) {
-    DEBUG_("[Error@fsnode_change_parent] change fsnode %lu's parent "
-           "from %lu to %lu.\n",
+    DEBUG_("[Error@fsnode_change_parent] change fsnode %lx's parent "
+           "from %lx to %lx.\n",
            child->fs_id, child->fs_parent->fs_id, new_parent->fs_id);
     return;
   }

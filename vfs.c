@@ -226,6 +226,16 @@ static inline struct inode *alloc_inode_(struct super_block *sb)
 	if (!inode)
 		return NULL;
   
+  // inode_init_once // expanded as following
+  memset(inode, 0, sizeof(*inode));
+  //  INIT_HLIST_NODE(&inode->i_hash);
+  INIT_LIST_HEAD(&inode->i_dentry);
+  //  INIT_LIST_HEAD(&inode->i_devices);
+  //  INIT_LIST_HEAD(&inode->i_wb_list);
+  //  INIT_LIST_HEAD(&inode->i_lru);
+  //  address_space_init_once(&inode->i_data);
+  //  i_size_ordered_init(inode);
+  
 	if (inode_init_always_(sb, inode)) {
 		if (inode->i_sb->s_op->destroy_inode)
 			inode->i_sb->s_op->destroy_inode(inode);
@@ -237,7 +247,7 @@ static inline struct inode *alloc_inode_(struct super_block *sb)
 	return inode;
 }
 
-/**
+/** fs/inode.c
  *	new_inode 	- obtain an inode
  *	@sb: superblock
  *
@@ -256,6 +266,17 @@ struct inode *new_inode(struct super_block *sb) {
 		// inode_sb_list_add(inode);
 	}
 	return inode;
+}
+
+// fs/inode.c
+void destroy_inode(struct inode *inode) {
+  // BUG_ON(!list_empty(&inode->i_lru));
+  // __destroy_inode(inode);
+  if (inode->i_sb->s_op->destroy_inode)
+    inode->i_sb->s_op->destroy_inode(inode);
+  else
+    // call_rcu(&inode->i_rcu, i_callback);
+    free(inode);
 }
 
 
@@ -393,7 +414,7 @@ void inode_inc_link_count(struct inode *inode) {
  * @mode: mode of the new inode
  */
 void inode_init_owner(struct inode *inode, const struct inode *dir,
-                             mode_t mode) {
+                      mode_t mode) {
 	inode->i_uid = current_fsuid();
 	if (dir && dir->i_mode & S_ISGID) {
 		inode->i_gid = dir->i_gid;

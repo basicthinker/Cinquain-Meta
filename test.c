@@ -18,10 +18,9 @@
 #define FS_CHILDREN_ 3
 #define CNODE_CHILDREN_ 10 // should be larger than FS_CHILDREN_
 
-struct cinq_fsnode *fs_root;
 extern struct cinq_fsnode *file_systems;
 
-static void print_fstree_(const int depth, const int no,
+static void print_fs_tree_(const int depth, const int no,
                           struct cinq_fsnode *root) {
   int i;
   for (i = 0; i < depth; ++i) {
@@ -41,44 +40,64 @@ static void print_fstree_(const int depth, const int no,
   i = 0;
   struct cinq_fsnode *p;
   for (p = root->fs_children; p != NULL; p = p->fs_child.next) {
-    print_fstree_(depth + 1, ++i, p);
+    print_fs_tree_(depth + 1, ++i, p);
   }
 }
 
-static void print_cnode_tree_(const int depth, const int no,
-                              struct cinq_inode *root) {
+static void print_dir_tree_(const int depth, const int no,
+                            struct cinq_inode *root) {
   int i;
   for (i = 0; i < depth; ++i) {
     fprintf(stdout, "  ");
   }
-  fprintf(stdout, "%d. ID=%lu name=%s with", no, root->ci_id, root->ci_name);
+  fprintf(stdout, "%d. ID=%lx name=%s with", no, root->ci_id, root->ci_name);
   struct cinq_tag *cur, *tmp;
   HASH_ITER(hh, root->ci_tags, cur, tmp) {
-    fprintf(stdout, " %lu", cur->t_fs->fs_id);
+    if (cur->t_fs) {
+      fprintf(stdout, " %s ", cur->t_fs->fs_name);
+    } else {
+      fprintf(stdout, " ROOT_TAG ");
+    }
   }
   fprintf(stdout, "\n");
   i = 0;
   struct cinq_inode *p;
   for (p = root->ci_children; p != NULL; p = p->ci_child.next) {
-    print_cnode_tree_(depth + 1, ++i, p);
+    print_dir_tree_(depth + 1, ++i, p);
   }
 }
 
-static inline void print_fstree(struct cinq_fsnode *root) {
-  print_fstree_(0, 1, root);
+static inline void print_fs_tree(struct cinq_fsnode *root) {
+  print_fs_tree_(0, 1, root);
 }
 
-static inline void print_cnode_tree(struct cinq_inode *root) {
-  print_cnode_tree_(0, 1, root);
+static inline void print_dir_tree(struct cinq_inode *root) {
+  print_dir_tree_(0, 1, root);
+}
+
+static void make_fs_tree(struct cinq_fsnode *root) {
+  // make two-layer file-system tree
+  int i, j;
+  char sub[MAX_NAME_LEN + 1];
+  for (i = 1; i <= FS_CHILDREN_; ++i) {
+    sprintf(sub, "1.%x", i); // produces unique name
+    struct cinq_fsnode *child = fsnode_new(sub, root);
+    for (j = 1; j <= FS_CHILDREN_; ++j) {
+      char subsub[MAX_NAME_LEN + 1];
+      sprintf(subsub, "%s.%x", sub, j); // produces unique name
+      fsnode_new(subsub, child);
+    }
+  }
 }
 
 // Example for invoking cinq_mkdir
-static void make_dir_tree(struct cinq_fsnode *fs, struct dentry *root) {
+static void make_dir_tree(struct cinq_fsnode *fs) {
+  struct dentry *root = fs->fs_root;
   int i, j, k;
   char buffer[MAX_NAME_LEN + 1];
   int mode = (CINQ_MERGE << CINQ_MODE_SHIFT) | S_IFDIR;
   
-  // make three-layer dir tree
+  // make three-layer directory tree
   for (i = 1; i <= CNODE_CHILDREN_; ++i) {
     struct inode *dir = root->d_inode;
     sprintf(buffer, "%d", i);
@@ -124,22 +143,12 @@ static void make_dir_tree(struct cinq_fsnode *fs, struct dentry *root) {
 
 int main (int argc, const char * argv[])
 {
-  fs_root = fsnode_new("1", NULL);
+  struct cinq_fsnode *fs_root = fsnode_new("1", NULL);
   
   // Constructs a basic balanced file system tree
-  int i, j;
-  char sub[MAX_NAME_LEN + 1];
-  for (i = 1; i <= FS_CHILDREN_; ++i) {
-    sprintf(sub, "1.%x", i); // produces unique name
-    struct cinq_fsnode *child = fsnode_new(sub, fs_root);
-    for (j = 1; j <= FS_CHILDREN_; ++j) {
-      char subsub[MAX_NAME_LEN + 1];
-      sprintf(subsub, "%s.%x", sub, j); // produces unique name
-      fsnode_new(subsub, child);
-    }
-  }
+  make_fs_tree(fs_root);
   fprintf(stdout, "\nConstruct a file system tree:\n");
-  print_fstree(fs_root);
+  print_fs_tree(fs_root);
   
   
   /* The following two steps simulate the process of file system update. */
@@ -147,7 +156,7 @@ int main (int argc, const char * argv[])
   struct cinq_fsnode *extra = fsnode_new("extra", fs_root);
   fsnode_move(fs_root->fs_children, extra); // moves its first child
   fprintf(stdout, "\nAfter adding 'extra' and moving:\n");
-  print_fstree(fs_root);
+  print_fs_tree(fs_root);
   fprintf(stderr, "\nTry wrong operation. \n"
           "(with error message if using -DCINQ_DEBUG)\n");
   fsnode_move(fs_root, extra); // try invalid operation
@@ -155,12 +164,34 @@ int main (int argc, const char * argv[])
   // Bridges the extra created above.
   fprintf(stdout, "\nCross out 'extra':\n");
   fsnode_bridge(extra);
-  print_fstree(fs_root);
+  print_fs_tree(fs_root);
   
+  
+  // Prepare cnode tree
+  struct dentry *d_root = cinqfs.mount((struct file_system_type *)&cinqfs,
+                                       0, NULL, NULL);
+  // Register file systems by making first-level directories
+  struct cinq_fsnode *fs;
+  int mode = (CINQ_MERGE << CINQ_MODE_SHIFT) | S_IFDIR;
+  for (fs = file_systems; fs != NULL; fs = fs->fs_member.next) {
+    struct qstr dname = { .name = (unsigned char *)fs->fs_name,
+                          .len = strlen(fs->fs_name) };
+    struct dentry *den = d_alloc(NULL, &dname);
+    den->d_fsdata = (void *)fs->fs_id;
+    cinq_mkdir(d_root->d_inode, den, mode); // first parameter is root inode.
+  }
+  fprintf(stdout, "\nAfter file system registeration:\n");
+  print_dir_tree(cnode(d_root->d_inode));
   
   // Generates balanced dir/file tree on each file system
-  
-  
+  for (fs = file_systems; fs != NULL; fs = fs->fs_member.next) {
+    make_dir_tree(fs);
+  }
+  fprintf(stdout, "\nWith three-layer dir tree:\n");
+  print_dir_tree(cnode(d_root->d_inode));
+
+  // Kill file systems
+  cinqfs.kill_sb(d_root->d_sb);
   fsnode_free_all(fs_root);
   return 0;
 }

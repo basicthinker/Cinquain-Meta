@@ -189,9 +189,57 @@ struct dentry *d_splice_alias(struct inode *inode,
 	return NULL;
 }
 
+/**
+ * d_invalidate - invalidate a dentry
+ * @dentry: dentry to invalidate
+ *
+ * Try to invalidate the dentry if it turns out to be
+ * possible. If there are other dentries that can be
+ * reached through this one we can't delete it and we
+ * return -EBUSY. On success we return 0.
+ *
+ * no dcache lock.
+ */
+// All children should be invalidated.
+int d_invalidate(struct dentry * dentry) {
+  //	/*
+  //	 * Check whether to do a partial shrink_dcache
+  //	 * to get rid of unused child entries.
+  //	 */
+  //	if (!list_empty(&dentry->d_subdirs)) {
+  //		spin_unlock(&dentry->d_lock);
+  //		shrink_dcache_parent(dentry);
+  //		spin_lock(&dentry->d_lock);
+  //	}
+  //  
+  //	/*
+  //	 * Somebody else still using it?
+  //	 *
+  //	 * If it's a directory, we can't drop it
+  //	 * for fear of somebody re-populating it
+  //	 * with children (even though dropping it
+  //	 * would make it unreachable from the root,
+  //	 * we might still populate it if it was a
+  //	 * working directory or similar).
+  //	 */
+  //	if (dentry->d_count > 1) {
+  //		if (dentry->d_inode && S_ISDIR(dentry->d_inode->i_mode)) {
+  //			spin_unlock(&dentry->d_lock);
+  //			return -EBUSY;
+  //		}
+  //	}
+  //  
+  //	__d_drop(dentry);
+  //	spin_unlock(&dentry->d_lock);
+	return 0;
+}
+
+
 // Invoked when super block is killed
 void d_genocide(struct dentry *root) {
-  
+  if (!root) return;
+  free(root);
+  // Deal with its children...
 }
 
 // Returns the current uid who is taking some file system operation

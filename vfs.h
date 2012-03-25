@@ -499,6 +499,8 @@ extern struct dentry *dget(struct dentry *dentry);
 
 extern struct dentry *d_splice_alias(struct inode *inode,
                                      struct dentry *dentry);
+extern int d_invalidate(struct dentry * dentry);
+
 extern void d_genocide(struct dentry *root);
 
 extern unsigned int current_fsuid(void);
@@ -507,6 +509,7 @@ extern unsigned int current_fsgid(void);
 
 
 // vfs.c
+
 extern struct dentry *mount_nodev(struct file_system_type *fs_type,
                                   int flags, void *data,
                                   int (*fill_super)(struct super_block *,
@@ -518,6 +521,8 @@ extern struct dentry *mount_nodev(struct file_system_type *fs_type,
  *	Allocates a new inode for given superblock.
  */
 extern struct inode *new_inode(struct super_block *sb);
+
+extern void destroy_inode(struct inode *inode);
 
 extern void mark_inode_dirty(struct inode *inode);
 

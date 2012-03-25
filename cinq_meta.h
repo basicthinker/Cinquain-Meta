@@ -21,6 +21,7 @@ struct cinq_fsnode {
   unsigned long fs_id;
   char fs_name[MAX_NAME_LEN + 1];
   struct cinq_fsnode *fs_parent;
+  struct dentry *fs_root;
   
   // Using hash table to store children
   struct cinq_fsnode *fs_children;
@@ -93,6 +94,10 @@ struct cinq_inode {
 // No inode cache is necessary since cinq_inodes are in memory.
 // Therefore no public alloc/free-like functions are provided.
 
+// Retrieves cinq_inode pointer from inode
+static inline struct cinq_inode *cnode(const struct inode *inode) {
+  return ((struct cinq_tag *)inode->i_ino)->t_host;
+}
 
 /* super.c */
 
@@ -154,6 +159,7 @@ extern int cinq_release_file (struct inode * inode, struct file * filp);
 
 
 /* cinq_meta.c */
+extern const struct file_system_type cinqfs;
 extern const struct super_operations cinq_super_operations;
 extern const struct inode_operations cinq_dir_inode_operations;
 extern const struct inode_operations cinq_file_inode_operations;

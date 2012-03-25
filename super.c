@@ -8,6 +8,7 @@
 
 #include "cinq_meta.h"
 
+// @data: can be NULL
 static int cinq_fill_super_(struct super_block *sb, void *data, int silent) {
   struct inode *inode = NULL;
 	struct dentry *root;
@@ -52,8 +53,11 @@ struct dentry *cinq_mount (struct file_system_type *fs_type, int flags,
 }
 
 void cinq_kill_sb (struct super_block *sb) {
-  cnode_free_all((struct cinq_inode *)sb->s_root->d_inode->i_ino);
-  d_genocide(sb->s_root);
+  if (sb->s_root) {
+    cnode_free_all(cnode(sb->s_root->d_inode));
+    d_genocide(sb->s_root);
+  }
+  DEBUG_ON_(!sb->s_root, "[Warning@cinq_kill_sb]: invoked on null dentry.\n");
 }
 
 void cinq_dirty_inode(struct inode *inode) {

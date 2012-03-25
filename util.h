@@ -38,7 +38,7 @@
 #define DEBUG_ON_(cond, ...) if (cond) { fprintf(stderr, __VA_ARGS__); }
 #define DEBUG_(...) (fprintf(stderr, __VA_ARGS__))
 #else
-#define DEBUG_ON_(cond, ...) (cond)
+#define DEBUG_ON_(cond, ...) ((void)(cond))
 #define DEBUG_(...)
 #endif // CINQ_DEBUG
 
@@ -182,9 +182,6 @@ static inline void * ERR_PTR(long error) { // include/linux/err.h
 #define CINQ_MAGIC 0x3122
 #define FILE_HASH_WIDTH 16 // bytes
 #define MAX_NAME_LEN 255 // max value
-
-// reference to include/linux/fs.h
-#define CINQ_ROOT_FL 0x10000000 // root inode that belongs to NONE file system
 
 #define HASH_FIND_BY_STR(hh, head, findstr, out) \
     HASH_FIND(hh, head, findstr, strlen(findstr), out)
