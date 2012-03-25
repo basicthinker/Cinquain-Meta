@@ -53,10 +53,10 @@ static void print_dir_tree_(const int depth, const int no,
   fprintf(stdout, "%d. ID=%lx name=%s with", no, root->ci_id, root->ci_name);
   struct cinq_tag *cur, *tmp;
   HASH_ITER(hh, root->ci_tags, cur, tmp) {
-    if (cur->t_fs) {
-      fprintf(stdout, " %s ", cur->t_fs->fs_name);
-    } else {
+    if (cur->t_fs == META_FS) {
       fprintf(stdout, " ROOT_TAG ");
+    } else {
+      fprintf(stdout, " %s ", cur->t_fs->fs_name);
     }
   }
   fprintf(stdout, "\n");
@@ -80,70 +80,74 @@ static void make_fs_tree(struct cinq_fsnode *root) {
   int i, j;
   char sub[MAX_NAME_LEN + 1];
   for (i = 1; i <= FS_CHILDREN_; ++i) {
-    sprintf(sub, "1.%x", i); // produces unique name
+    sprintf(sub, "0_%x_0", i); // produces unique name
     struct cinq_fsnode *child = fsnode_new(sub, root);
     for (j = 1; j <= FS_CHILDREN_; ++j) {
       char subsub[MAX_NAME_LEN + 1];
-      sprintf(subsub, "%s.%x", sub, j); // produces unique name
+      sprintf(subsub, "0_%x_%x", i, j); // produces unique name
       fsnode_new(subsub, child);
     }
   }
 }
 
 // Example for invoking cinq_mkdir
-static void make_dir_tree(struct cinq_fsnode *fs) {
+static void *make_dir_tree(void *fsnode) {
+  struct cinq_fsnode *fs = (struct cinq_fsnode *)fsnode;
   struct dentry *root = fs->fs_root;
   int i, j, k;
+  int mi, mj, mk;
+  sscanf(fs->fs_name, "%x_%x_%x", &mi, &mj, &mk);
   char buffer[MAX_NAME_LEN + 1];
   int mode = (CINQ_MERGE << CINQ_MODE_SHIFT) | S_IFDIR;
   
   // make three-layer directory tree
-  for (i = 1; i <= CNODE_CHILDREN_; ++i) {
+  for (i = mi; i < CNODE_CHILDREN_; ++i) {
     struct inode *dir = root->d_inode;
-    sprintf(buffer, "%d", i);
+    sprintf(buffer, "%x", i);
     struct qstr dname =
         { .name = (unsigned char *)buffer, .len = strlen(buffer) };
     struct dentry *den = d_alloc(root, &dname);
     den->d_fsdata = (void *)fs->fs_id;
     if (cinq_mkdir(dir, den, mode)) {
-      DEBUG_("[Error@make_dir_tree] failed to make dir '%s' by %lx(%s).\n",
+      DEBUG_("[Error@make_dir_tree] failed to make dir '%s' by fs %lx(%s).\n",
              buffer, fs->fs_id, fs->fs_name);
-      return;
+      pthread_exit(NULL);
     }
     
-    for (j = 1; j <= CNODE_CHILDREN_; ++j) {
+    for (j = mj; j < CNODE_CHILDREN_; ++j) {
       struct inode *subdir = den->d_inode;
-      sprintf(buffer, "%d", j);
+      sprintf(buffer, "%x.%x", i, j);
       struct qstr dname =
           { .name = (unsigned char *)buffer, .len = strlen(buffer) };
       struct dentry *subden = d_alloc(den, &dname);
       subden->d_fsdata = (void *)fs->fs_id;
       if (cinq_mkdir(subdir, subden, mode)) {
-        DEBUG_("[Error@make_dir_tree] failed to make sub-dir '%s' by %lx(%s).\n",
-               buffer, fs->fs_id, fs->fs_name);
-        return;
+        DEBUG_("[Error@make_dir_tree] failed to make sub-dir '%s'"
+               " by fs %lx(%s).\n", buffer, fs->fs_id, fs->fs_name);
+        pthread_exit(NULL);
       }
       
-      for (k = 1; k <= CNODE_CHILDREN_; ++k) {
+      for (k = mk; k < CNODE_CHILDREN_; ++k) {
         struct inode *subsubdir = subden->d_inode;
-        sprintf(buffer, "%d", k);
+        sprintf(buffer, "%x.%x.%x", i, j, k);
         struct qstr dname = 
             { .name = (unsigned char *)buffer, .len = strlen(buffer) };
         struct dentry *subsubden = d_alloc(subden, &dname);
-        den->d_fsdata = (void *)fs->fs_id;
+        subsubden->d_fsdata = (void *)fs->fs_id;
         if (cinq_mkdir(subsubdir, subsubden, mode)) {
           DEBUG_("[Error@make_dir_tree] failed to make sub-sub-dir '%s' "
-                 "by %lx(%s).\n", buffer, fs->fs_id, fs->fs_name);
-          return;
+                 "by fs %lx(%s).\n", buffer, fs->fs_id, fs->fs_name);
+          pthread_exit(NULL);
         }
       }
     }
   }
+  pthread_exit(NULL);
 }
 
 int main (int argc, const char * argv[])
 {
-  struct cinq_fsnode *fs_root = fsnode_new("1", NULL);
+  struct cinq_fsnode *fs_root = fsnode_new("0_0_0", NULL);
   
   // Constructs a basic balanced file system tree
   make_fs_tree(fs_root);
@@ -184,10 +188,20 @@ int main (int argc, const char * argv[])
   print_dir_tree(cnode(d_root->d_inode));
   
   // Generates balanced dir/file tree on each file system
+  const int fsn = HASH_CNT(fs_member, file_systems);
+  pthread_t threads[fsn];
+  int ti = 0;
   for (fs = file_systems; fs != NULL; fs = fs->fs_member.next) {
-    make_dir_tree(fs);
+    int err = pthread_create(&threads[ti], NULL, make_dir_tree, fs);
+    if (err) {
+      DEBUG_("[Error@main] return code from pthread_create() is %d.\n", err);
+    }
   }
   fprintf(stdout, "\nWith three-layer dir tree:\n");
+  void *status;
+  for (ti = 0; ti < fsn; ++ti) {
+    pthread_join(threads[ti], &status);
+  }
   print_dir_tree(cnode(d_root->d_inode));
 
   // Kill file systems

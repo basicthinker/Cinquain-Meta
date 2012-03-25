@@ -13,7 +13,7 @@
 #include "cinq_meta.h"
 
 static inline int inode_is_root_(struct inode *inode) {
-  return ((struct cinq_tag *)inode->i_ino)->t_fs == 0;
+  return ((struct cinq_tag *)inode->i_ino)->t_fs == META_FS;
 }
 
 static inline int cnode_is_root_(struct cinq_inode *cnode) {
@@ -88,7 +88,7 @@ static void cnode_free_(struct cinq_inode *cnode) {
     HASH_REMOVE(ci_child, parent->ci_children, cnode);
     write_unlock(&parent->ci_children_lock);
   }
-  cnode_free_(cnode);
+  cnode_mfree(cnode);
 }
 
 // This function is NOT thread safe, since it is used in the end,
@@ -164,7 +164,7 @@ struct inode *cnode_make_tree(struct super_block *sb) {
   // insert_inode_hash(inode);
   iroot->i_op = &cinq_dir_inode_operations;
   // use t_fs = 0 for root tag
-  struct cinq_tag *tag = tag_new_(0, croot, CINQ_OVERWR, iroot);
+  struct cinq_tag *tag = tag_new_(META_FS, croot, CINQ_OVERWR, iroot);
   HASH_ADD_PTR(croot->ci_tags, t_fs, tag);
   return iroot;
 }
@@ -174,8 +174,13 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
   
   struct cinq_inode *parent = cnode(dir);
   struct cinq_inode *child;
-  struct cinq_fsnode *fs = dentry->d_fsdata;
   struct cinq_tag *tag;
+  struct cinq_fsnode *fs = dentry->d_fsdata;
+  if (!fs) {
+    DEBUG_("[Error@cinq_mkdir] null fsnode for %s under dir %lx.\n",
+            dentry->d_name.name, dir->i_ino);
+    return -EFAULT;
+  }
   
   if (inode_is_root_(dir)) {
     // registers new file system node
