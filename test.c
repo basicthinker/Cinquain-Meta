@@ -18,8 +18,6 @@
 #define FS_CHILDREN_ 3
 #define CNODE_CHILDREN_ 10 // should be larger than FS_CHILDREN_
 
-extern struct cinq_fsnode *file_systems;
-
 static void print_fs_tree_(const int depth, const int no,
                           struct cinq_fsnode *root) {
   int i;
@@ -28,7 +26,7 @@ static void print_fs_tree_(const int depth, const int no,
   }
   // check global list
   struct cinq_fsnode *fsnode;
-  HASH_FIND_BY_STR(fs_member, file_systems, root->fs_name, fsnode);
+  HASH_FIND_BY_STR(fs_member, file_systems.fs_table, root->fs_name, fsnode);
   if (fsnode != root) {
     fprintf(stderr, "Error locating fsnode %lx: %p != %p\n",
             root->fs_id, fsnode, root);
@@ -177,7 +175,7 @@ int main (int argc, const char * argv[])
   // Register file systems by making first-level directories
   struct cinq_fsnode *fs;
   int mode = (CINQ_MERGE << CINQ_MODE_SHIFT) | S_IFDIR;
-  for (fs = file_systems; fs != NULL; fs = fs->fs_member.next) {
+  for (fs = file_systems.fs_table; fs != NULL; fs = fs->fs_member.next) {
     struct qstr dname = { .name = (unsigned char *)fs->fs_name,
                           .len = strlen(fs->fs_name) };
     struct dentry *den = d_alloc(NULL, &dname);
@@ -188,10 +186,10 @@ int main (int argc, const char * argv[])
   print_dir_tree(cnode(droot->d_inode));
   
   // Generates balanced dir/file tree on each file system
-  const int fsn = HASH_CNT(fs_member, file_systems);
+  const int fsn = HASH_CNT(fs_member, file_systems.fs_table);
   pthread_t threads[fsn];
   int ti = 0;
-  for (fs = file_systems; fs != NULL; fs = fs->fs_member.next) {
+  for (fs = file_systems.fs_table; fs != NULL; fs = fs->fs_member.next) {
     int err = pthread_create(&threads[ti], NULL, make_dir_tree, fs);
     if (err) {
       DEBUG_("[Error@main] return code from pthread_create() is %d.\n", err);

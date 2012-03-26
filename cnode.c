@@ -12,11 +12,11 @@
 
 #include "cinq_meta.h"
 
-static inline int inode_is_root_(struct inode *inode) {
+static inline int inode_is_root_(const struct inode *inode) {
   return ((struct cinq_tag *)inode->i_ino)->t_fs == META_FS;
 }
 
-static inline int cnode_is_root_(struct cinq_inode *cnode) {
+static inline int cnode_is_root_(const struct cinq_inode *cnode) {
   return cnode->ci_parent == cnode;
 }
 
@@ -235,12 +235,19 @@ static inline struct inode *cinq_lookup_(const struct inode *dir,
                                          const char *name,
                                          struct cinq_fsnode **fs_p) {
   struct cinq_inode *parent = cnode(dir);
-  struct cinq_inode *child;
+  if (inode_is_root_(dir)) {
+    struct cinq_fsnode *fs;
+    read_lock(&file_systems.lock);
+    HASH_FIND_BY_STR(fs_member, file_systems.fs_table, name, fs);
+    read_unlock(&file_systems.lock);
+    if (!fs) return NULL;
+    return fs->fs_root->d_inode;
+  }
   
+  struct cinq_inode *child;
   read_lock(&parent->ci_children_lock);
   HASH_FIND_BY_STR(ci_child, parent->ci_children, name, child);
   read_unlock(&parent->ci_children_lock);
-  
   if (!child) {
     DEBUG_("[Info@cinq_lookup_] no dir or file name is found: %s@%lx\n",
            name, dir->i_ino);

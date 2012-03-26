@@ -74,16 +74,19 @@ typedef unsigned fmode_t;
 typedef uint64_t blkcnt_t;
 
 typedef pthread_rwlock_t rwlock_t;
+#define RW_LOCK_UNLOCKED PTHREAD_RWLOCK_INITIALIZER
 #define rwlock_init(lock_p) (pthread_rwlock_init(lock_p, NULL))
+// #define rwlock_destroy(lock_p) (pthread_rwlock_destroy(lock_p));
 #define read_lock(lock_p) (pthread_rwlock_rdlock(lock_p))
 #define read_unlock(lock_p) (pthread_rwlock_unlock(lock_p))
 #define write_lock(lock_p) (pthread_rwlock_wrlock(lock_p))
 #define write_unlock(lock_p) (pthread_rwlock_unlock(lock_p))
 
-typedef pthread_rwlock_t spinlock_t;
-#define spin_lock_init(lock_p) (pthread_rwlock_init(lock_p, NULL))
-#define spin_lock(lock_p) (pthread_rwlock_wrlock(lock_p))
-#define spin_unlock(lock_p) (pthread_rwlock_unlock(lock_p))
+typedef pthread_mutex_t spinlock_t;
+#define spin_lock_init(lock_p) (pthread_mutex_init(lock_p, NULL))
+// #define spin_lock_destroy(lock_p) (pthread_mutex_destroy(lock_p))
+#define spin_lock(lock_p) (pthread_mutex_lock(lock_p))
+#define spin_unlock(lock_p) (pthread_mutex_unlock(lock_p))
 
 struct list_head {
   struct list_head *next, *prev;

@@ -12,6 +12,11 @@
 
 #include "cinq_meta.h"
 
+struct cinq_file_systems file_systems = {
+  .lock = RW_LOCK_UNLOCKED,
+  .fs_table = NULL
+};
+
 const struct file_system_type cinqfs = {
   .name = "cinqfs",
 #ifdef __KERNEL__

@@ -25,6 +25,7 @@ struct cinq_fsnode {
   
   // Using hash table to store children
   struct cinq_fsnode *fs_children;
+  rwlock_t fs_children_lock;
   UT_hash_handle fs_child; // used for parent's children
   UT_hash_handle fs_tag; // used for cinq_inode's tags
   UT_hash_handle fs_member; // used for global file system list
@@ -35,11 +36,6 @@ static inline int fsnode_is_root(struct cinq_fsnode *fsnode) {
 }
 
 /* fsnode.c */
-// Note that these operations are NOT thread safe.
-// However, the parent can be safely read from multiple threads.
-//
-// This implies that only a single thread should be used to manipulate fsnodes,
-// while multiple threads are allowed to retrieve the parent of a fsnode.
 
 // Creates a fsnode.
 // @parent the fsnode's parent, while NULL indicates a root fsnode.
@@ -64,6 +60,11 @@ enum cinq_inherit_type {
 };
 #define CINQ_MODE_SHIFT 30
 #define I_MODE_FILTER 01111111111
+
+struct cinq_file_systems {
+  rwlock_t lock;
+  struct cinq_fsnode *fs_table;
+};
 
 struct cinq_inode;
 
@@ -159,6 +160,7 @@ extern int cinq_release_file (struct inode * inode, struct file * filp);
 
 
 /* cinq_meta.c */
+extern struct cinq_file_systems file_systems;
 extern const struct file_system_type cinqfs;
 extern const struct super_operations cinq_super_operations;
 extern const struct inode_operations cinq_dir_inode_operations;

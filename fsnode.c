@@ -12,8 +12,6 @@
 
 #include "cinq_meta.h"
 
-struct cinq_fsnode *file_systems = NULL;
-
 // Checks wether two fsnodes have direct relation.
 // Used to prevent cyclic path in tree.
 static inline int fsnode_ancestor_(struct cinq_fsnode *ancestor,
@@ -26,27 +24,39 @@ static inline int fsnode_ancestor_(struct cinq_fsnode *ancestor,
 }
 
 struct cinq_fsnode *fsnode_new(const char *name, struct cinq_fsnode *parent) {
-  struct cinq_fsnode *fsnode;
-  HASH_FIND_BY_STR(fs_member, file_systems, name, fsnode);
   
-  DEBUG_ON_(fsnode, "[Warning@fsnode_new] duplicate names: %s\n", name);
-  
-  fsnode = fsnode_malloc();
+  struct cinq_fsnode *fsnode = fsnode_malloc();
   fsnode->fs_id = (unsigned long)fsnode;
   DEBUG_ON_((void *)fsnode->fs_id != fsnode,
            "[Error@cnode_new] conversion fails: fs_id %lx != fsnode %p",
            fsnode->fs_id, fsnode);
-  
   strncpy(fsnode->fs_name, name, MAX_NAME_LEN);
-  HASH_ADD_BY_STR(fs_member, file_systems, fs_name, fsnode); // to global list
   if (parent) {
     fsnode->fs_parent = parent;
-    HASH_ADD_BY_PTR(fs_child, fsnode->fs_parent->fs_children, fs_id, fsnode);
   } else {
     fsnode->fs_parent = fsnode; // denotes root
   }
   fsnode->fs_root = NULL; // filled after registeration
   fsnode->fs_children = NULL; // required by uthash
+  rwlock_init(&fsnode->fs_children_lock);
+  
+  struct cinq_fsnode *dup;
+  write_lock(&file_systems.lock);
+  HASH_FIND_BY_STR(fs_member, file_systems.fs_table, name, dup);
+  if (unlikely(dup)) {
+    DEBUG_("[Warning@fsnode_new] duplicate names: %s\n", name);
+    write_unlock(&file_systems.lock);
+    fsnode_mfree(fsnode);
+    return NULL;
+  }
+  HASH_ADD_BY_STR(fs_member, file_systems.fs_table, fs_name, fsnode);
+  write_unlock(&file_systems.lock);
+  
+  if (parent) {
+    write_lock(&parent->fs_children_lock);
+    HASH_ADD_BY_PTR(fs_child, parent->fs_children, fs_id, fsnode);
+    write_unlock(&parent->fs_children_lock);
+  }
   return fsnode;
 }
 
@@ -57,10 +67,16 @@ void fsnode_free(struct cinq_fsnode *fsnode) {
            "who still has children.\n", fsnode->fs_id, fsnode->fs_name);
     return;
   }
+  
+  write_lock(&file_systems.lock);
+  HASH_REMOVE(fs_member, file_systems.fs_table, fsnode);
+  write_unlock(&file_systems.lock);
+  
   if (!fsnode_is_root(fsnode) && fsnode->fs_parent) {
+    write_lock(&fsnode->fs_parent->fs_children_lock);
     HASH_REMOVE(fs_child, fsnode->fs_parent->fs_children, fsnode);
+    write_unlock(&fsnode->fs_parent->fs_children_lock);
   }
-  HASH_REMOVE(fs_member, file_systems, fsnode);
   fsnode_mfree(fsnode);
 }
 
@@ -82,9 +98,15 @@ void fsnode_move(struct cinq_fsnode *child,
            child->fs_id, child->fs_parent->fs_id, new_parent->fs_id);
     return;
   }
+  write_lock(&child->fs_parent->fs_children_lock);
   HASH_REMOVE(fs_child, child->fs_parent->fs_children, child);
+  write_unlock(&child->fs_parent->fs_children_lock);
+
   child->fs_parent = new_parent; // supposed to be atomic
+  
+  write_lock(&new_parent->fs_children_lock);
   HASH_ADD_BY_PTR(fs_child, new_parent->fs_children, fs_id, child);
+  write_unlock(&new_parent->fs_children_lock);
 }
 
 void fsnode_bridge(struct cinq_fsnode *out) {
