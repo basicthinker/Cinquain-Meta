@@ -242,8 +242,8 @@ static inline struct inode *cinq_lookup_(const struct inode *dir,
   read_unlock(&parent->ci_children_lock);
   
   if (!child) {
-    DEBUG_("[Info@cinq_lookup_] no dir or file name is found: %s@%p\n",
-           name, dir);
+    DEBUG_("[Info@cinq_lookup_] no dir or file name is found: %s@%lx\n",
+           name, dir->i_ino);
     return NULL;
   }
   

@@ -174,10 +174,9 @@ static inline void * ERR_PTR(long error) { // include/linux/err.h
 
 #endif // __KERNEL__
 
-
 /* Non-portability utilities */
 
-#include "uthash.h"
+#include "uthash/uthash.h"
 
 #define CINQ_MAGIC 0x3122
 #define FILE_HASH_WIDTH 16 // bytes

@@ -147,32 +147,32 @@ static void *make_dir_tree(void *fsnode) {
 
 int main (int argc, const char * argv[])
 {
-  struct cinq_fsnode *fs_root = fsnode_new("0_0_0", NULL);
+  struct cinq_fsnode *fsroot = fsnode_new("0_0_0", NULL);
   
   // Constructs a basic balanced file system tree
-  make_fs_tree(fs_root);
+  make_fs_tree(fsroot);
   fprintf(stdout, "\nConstruct a file system tree:\n");
-  print_fs_tree(fs_root);
+  print_fs_tree(fsroot);
   
   
   /* The following two steps simulate the process of file system update. */
   // Moves a subtree
-  struct cinq_fsnode *extra = fsnode_new("extra", fs_root);
-  fsnode_move(fs_root->fs_children, extra); // moves its first child
+  struct cinq_fsnode *extra = fsnode_new("extra", fsroot);
+  fsnode_move(fsroot->fs_children, extra); // moves its first child
   fprintf(stdout, "\nAfter adding 'extra' and moving:\n");
-  print_fs_tree(fs_root);
+  print_fs_tree(fsroot);
   fprintf(stderr, "\nTry wrong operation. \n"
           "(with error message if using -DCINQ_DEBUG)\n");
-  fsnode_move(fs_root, extra); // try invalid operation
+  fsnode_move(fsroot, extra); // try invalid operation
   
   // Bridges the extra created above.
   fprintf(stdout, "\nCross out 'extra':\n");
   fsnode_bridge(extra);
-  print_fs_tree(fs_root);
+  print_fs_tree(fsroot);
   
   
   // Prepare cnode tree
-  struct dentry *d_root = cinqfs.mount((struct file_system_type *)&cinqfs,
+  struct dentry *droot = cinqfs.mount((struct file_system_type *)&cinqfs,
                                        0, NULL, NULL);
   // Register file systems by making first-level directories
   struct cinq_fsnode *fs;
@@ -182,10 +182,10 @@ int main (int argc, const char * argv[])
                           .len = strlen(fs->fs_name) };
     struct dentry *den = d_alloc(NULL, &dname);
     den->d_fsdata = (void *)fs->fs_id;
-    cinq_mkdir(d_root->d_inode, den, mode); // first parameter is root inode.
+    cinq_mkdir(droot->d_inode, den, mode); // first parameter is root inode.
   }
   fprintf(stdout, "\nAfter file system registeration:\n");
-  print_dir_tree(cnode(d_root->d_inode));
+  print_dir_tree(cnode(droot->d_inode));
   
   // Generates balanced dir/file tree on each file system
   const int fsn = HASH_CNT(fs_member, file_systems);
@@ -202,11 +202,11 @@ int main (int argc, const char * argv[])
   for (ti = 0; ti < fsn; ++ti) {
     pthread_join(threads[ti], &status);
   }
-  print_dir_tree(cnode(d_root->d_inode));
+  print_dir_tree(cnode(droot->d_inode));
 
   // Kill file systems
-  cinqfs.kill_sb(d_root->d_sb);
-  fsnode_free_all(fs_root);
+  cinqfs.kill_sb(droot->d_sb);
+  fsnode_free_all(fsroot);
   return 0;
 }
 
