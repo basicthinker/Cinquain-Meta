@@ -151,8 +151,8 @@ static int total_num_ok = 0;
 static void *rand_lookup(void *droot) {
   // randomly choose client file system
   char fs_name[MAX_NAME_LEN + 1];
-  int fs_j = rand() % FS_CHILDREN_ + 1;
-  int fs_k = rand() % (FS_CHILDREN_ + 1);
+  const int fs_j = rand() % FS_CHILDREN_ + 1;
+  const int fs_k = rand() % (FS_CHILDREN_ + 1);
   sprintf(fs_name, "0_%x_%x", fs_j, fs_k);
   
   const int k_num_seg = 4;
@@ -163,9 +163,9 @@ static void *rand_lookup(void *droot) {
   for (i = 0; i < NUM_LOOKUPS_; ++i) {
     // manually fills dir segments
     // which should be parsed from path in practice
-    int dir_i = rand() % (CNODE_CHILDREN_ + 1);
-    int dir_j = rand() % (CNODE_CHILDREN_ + 1);
-    int dir_k = rand() % (CNODE_CHILDREN_ + 1);
+    const int dir_i = rand() % (CNODE_CHILDREN_ + 1);
+    const int dir_j = rand() % (CNODE_CHILDREN_ + 1);
+    const int dir_k = rand() % (CNODE_CHILDREN_ + 1);
     // lookup path "/fs_name/dir[1]/dir[2]/dir[3]"
     sprintf(dir[0], "%s", fs_name);
     sprintf(dir[1], "%x", dir_i);
@@ -182,10 +182,14 @@ static void *rand_lookup(void *droot) {
       struct dentry *subden = d_alloc(den, &dname);
       subden->d_fsdata = den->d_fsdata;
       inode->i_op->lookup(inode, subden, NULL);
-      if (!subden->d_inode) {
-        // check result
-        fprintf(stdout, "%s finds %s ->\t - \t%s\n", fs_name, dir[j], result);
-        ++num_ok;
+      if (!subden->d_inode) { // when target path is not found
+        if (dir_i >= CNODE_CHILDREN_ || dir_j >= CNODE_CHILDREN_ ||
+            dir_k >= CNODE_CHILDREN_) { // when it should be not-found
+          result = "OK";
+        } else {
+          result = "WRONG!";
+        }
+        fprintf(stdout, "%s finds %s\t->\t - \t%s\n", fs_name, dir[j], result);
         break;
       } else {
         den = subden;
@@ -193,11 +197,28 @@ static void *rand_lookup(void *droot) {
       }
     } // for
     if (j == k_num_seg) { // successful lookup
+      result = "WRONG!";
       char *cur_fs_name = ((struct cinq_fsnode *)den->d_fsdata)->fs_name;
-      fprintf(stdout, "%s finds %s ->\t%s\t%s\n", fs_name, dir[j - 1],
-              cur_fs_name, "OK");
-      ++num_ok;
+      if (strcmp(fs_name, cur_fs_name)) { // not identical
+        // when parent file system is used
+        if (fs_j > dir_j) { // root file system should be used
+          if (strcmp(cur_fs_name, "0_0_0") == 0) {
+            result = "OK";
+          }
+        } else if (fs_k > dir_k) { // second layer file system shoud be used
+          int cur_j, cur_k;
+          sscanf(cur_fs_name, "0_%x_%x", &cur_j, &cur_k);
+          if (cur_j == fs_j && cur_k == 0) {
+            result = "OK";
+          }
+        }
+      } else if (fs_j <= dir_j && fs_k <= dir_k) {
+        result = "OK"; // when file system not changed
+      }
+      fprintf(stdout, "%s finds %s\t->\t%s\t%s\n", fs_name, dir[j - 1],
+              cur_fs_name, result);
     }
+    if (strcmp(result, "OK") == 0) ++num_ok;
   } // for
   spin_lock(&num_ok_lock);
   total_num_ok += num_ok;
@@ -265,18 +286,19 @@ int main(int argc, const char * argv[]) {
   print_dir_tree(cnode(iroot));
 
   fprintf(stdout, "\nTest lookup:\n");
-  const int k_tn = 1;
+  const int k_tn = 5; // number of threads
   pthread_t lookup_t[k_tn];
-  for (int i = 0; i < k_tn; ++i) {
+  int i;
+  for (i = 0; i < k_tn; ++i) {
     int err = pthread_create(&lookup_t[i], NULL, rand_lookup, droot);
     if (err) {
       DEBUG_("[Error@main] return code from pthread_create() is %d.\n", err);
     }
   }
-  for (int i = 0; i < k_tn; ++i) {
+  for (i = 0; i < k_tn; ++i) {
     pthread_join(lookup_t[i], &status);
   }
-  fprintf(stdout, "\n%d/%d checked OK.\n", total_num_ok, NUM_LOOKUPS_);
+  fprintf(stdout, "\n%d/%d checked OK.\n", total_num_ok, NUM_LOOKUPS_ * k_tn);
   
   // Kill file systems
   cinqfs.kill_sb(droot->d_sb);
