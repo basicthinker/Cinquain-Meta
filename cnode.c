@@ -241,6 +241,7 @@ static inline struct inode *cinq_lookup_(const struct inode *dir,
     HASH_FIND_BY_STR(fs_member, file_systems.fs_table, name, fs);
     read_unlock(&file_systems.lock);
     if (!fs) return NULL;
+    *fs_p = fs;
     return fs->fs_root->d_inode;
   }
   
@@ -262,13 +263,13 @@ static inline struct inode *cinq_lookup_(const struct inode *dir,
     if (fsnode_is_root(fs)) {
       DEBUG_("[Info@cinq_lookup_] no file system has that dir or file:"
              "%s from %lx", name, (*fs_p)->fs_id);
-      break;
+      return NULL;
     }
     fs = fs->fs_parent;
     HASH_FIND_PTR(child->ci_tags, &fs, tag);
   }
   read_unlock(&child->ci_tags_lock);
- 
+
   *fs_p = tag->t_fs;
   return tag->t_inode;
   

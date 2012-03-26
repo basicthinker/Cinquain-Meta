@@ -16,7 +16,8 @@
 
 /* Test config */
 #define FS_CHILDREN_ 3
-#define CNODE_CHILDREN_ 10 // should be larger than FS_CHILDREN_
+#define CNODE_CHILDREN_ 5 // should be larger than FS_CHILDREN_
+#define NUM_LOOKUPS_ 50
 
 static void print_fs_tree_(const int depth, const int no,
                           struct cinq_fsnode *root) {
@@ -106,7 +107,7 @@ static void *make_dir_tree(void *fsnode) {
         { .name = (unsigned char *)buffer, .len = strlen(buffer) };
     struct dentry *den = d_alloc(root, &dname);
     den->d_fsdata = (void *)fs->fs_id;
-    if (cinq_mkdir(dir, den, mode)) {
+    if (dir->i_op->mkdir(dir, den, mode)) {
       DEBUG_("[Error@make_dir_tree] failed to make dir '%s' by fs %lx(%s).\n",
              buffer, fs->fs_id, fs->fs_name);
       pthread_exit(NULL);
@@ -119,7 +120,7 @@ static void *make_dir_tree(void *fsnode) {
           { .name = (unsigned char *)buffer, .len = strlen(buffer) };
       struct dentry *subden = d_alloc(den, &dname);
       subden->d_fsdata = (void *)fs->fs_id;
-      if (cinq_mkdir(subdir, subden, mode)) {
+      if (subdir->i_op->mkdir(subdir, subden, mode)) {
         DEBUG_("[Error@make_dir_tree] failed to make sub-dir '%s'"
                " by fs %lx(%s).\n", buffer, fs->fs_id, fs->fs_name);
         pthread_exit(NULL);
@@ -132,7 +133,7 @@ static void *make_dir_tree(void *fsnode) {
             { .name = (unsigned char *)buffer, .len = strlen(buffer) };
         struct dentry *subsubden = d_alloc(subden, &dname);
         subsubden->d_fsdata = (void *)fs->fs_id;
-        if (cinq_mkdir(subsubdir, subsubden, mode)) {
+        if (subsubdir->i_op->mkdir(subsubdir, subsubden, mode)) {
           DEBUG_("[Error@make_dir_tree] failed to make sub-sub-dir '%s' "
                  "by fs %lx(%s).\n", buffer, fs->fs_id, fs->fs_name);
           pthread_exit(NULL);
@@ -143,8 +144,68 @@ static void *make_dir_tree(void *fsnode) {
   pthread_exit(NULL);
 }
 
-int main (int argc, const char * argv[])
-{
+static spinlock_t num_ok_lock;
+static int total_num_ok = 0;
+
+// Example for invoking cinq_lookup
+static void *rand_lookup(void *droot) {
+  // randomly choose client file system
+  char fs_name[MAX_NAME_LEN + 1];
+  int fs_j = rand() % FS_CHILDREN_ + 1;
+  int fs_k = rand() % (FS_CHILDREN_ + 1);
+  sprintf(fs_name, "0_%x_%x", fs_j, fs_k);
+  
+  const int k_num_seg = 4;
+  char dir[k_num_seg][MAX_NAME_LEN + 1];
+  char *result = "OK";
+  int num_ok = 0;
+  int i, j;
+  for (i = 0; i < NUM_LOOKUPS_; ++i) {
+    // manually fills dir segments
+    // which should be parsed from path in practice
+    int dir_i = rand() % (CNODE_CHILDREN_ + 1);
+    int dir_j = rand() % (CNODE_CHILDREN_ + 1);
+    int dir_k = rand() % (CNODE_CHILDREN_ + 1);
+    // lookup path "/fs_name/dir[1]/dir[2]/dir[3]"
+    sprintf(dir[0], "%s", fs_name);
+    sprintf(dir[1], "%x", dir_i);
+    sprintf(dir[2], "%s.%x", dir[1], dir_j);
+    sprintf(dir[3], "%s.%x", dir[2], dir_k);
+    
+    // Omits dcache lookup.
+    // Dentry cache should be firstly used in practice.
+    struct dentry *den = (struct dentry *)droot;
+    struct inode *inode = den->d_inode;
+    for (j = 0; j < k_num_seg; ++j) {
+      struct qstr dname =
+          { .name = (unsigned char *)dir[j], .len = strlen(dir[j]) };
+      struct dentry *subden = d_alloc(den, &dname);
+      subden->d_fsdata = den->d_fsdata;
+      inode->i_op->lookup(inode, subden, NULL);
+      if (!subden->d_inode) {
+        // check result
+        fprintf(stdout, "%s finds %s ->\t - \t%s\n", fs_name, dir[j], result);
+        ++num_ok;
+        break;
+      } else {
+        den = subden;
+        inode = den->d_inode;
+      }
+    } // for
+    if (j == k_num_seg) { // successful lookup
+      char *cur_fs_name = ((struct cinq_fsnode *)den->d_fsdata)->fs_name;
+      fprintf(stdout, "%s finds %s ->\t%s\t%s\n", fs_name, dir[j - 1],
+              cur_fs_name, "OK");
+      ++num_ok;
+    }
+  } // for
+  spin_lock(&num_ok_lock);
+  total_num_ok += num_ok;
+  spin_unlock(&num_ok_lock);
+  pthread_exit(NULL);
+}
+
+int main(int argc, const char * argv[]) {
   struct cinq_fsnode *fsroot = fsnode_new("0_0_0", NULL);
   
   // Constructs a basic balanced file system tree
@@ -172,6 +233,7 @@ int main (int argc, const char * argv[])
   // Prepare cnode tree
   struct dentry *droot = cinqfs.mount((struct file_system_type *)&cinqfs,
                                        0, NULL, NULL);
+  struct inode *iroot = droot->d_inode;
   // Register file systems by making first-level directories
   struct cinq_fsnode *fs;
   int mode = (CINQ_MERGE << CINQ_MODE_SHIFT) | S_IFDIR;
@@ -180,31 +242,46 @@ int main (int argc, const char * argv[])
                           .len = strlen(fs->fs_name) };
     struct dentry *den = d_alloc(NULL, &dname);
     den->d_fsdata = (void *)fs->fs_id;
-    cinq_mkdir(droot->d_inode, den, mode); // first parameter is root inode.
+    iroot->i_op->mkdir(iroot, den, mode); // first parameter is root inode.
   }
   fprintf(stdout, "\nAfter file system registeration:\n");
-  print_dir_tree(cnode(droot->d_inode));
+  print_dir_tree(cnode(iroot));
   
   // Generates balanced dir/file tree on each file system
-  const int fsn = HASH_CNT(fs_member, file_systems.fs_table);
-  pthread_t threads[fsn];
+  const int k_fsn = HASH_CNT(fs_member, file_systems.fs_table);
+  pthread_t mkdir_t[k_fsn];
   int ti = 0;
   for (fs = file_systems.fs_table; fs != NULL; fs = fs->fs_member.next) {
-    int err = pthread_create(&threads[ti], NULL, make_dir_tree, fs);
+    int err = pthread_create(&mkdir_t[ti], NULL, make_dir_tree, fs);
     if (err) {
       DEBUG_("[Error@main] return code from pthread_create() is %d.\n", err);
     }
   }
   fprintf(stdout, "\nWith three-layer dir tree:\n");
   void *status;
-  for (ti = 0; ti < fsn; ++ti) {
-    pthread_join(threads[ti], &status);
+  for (ti = 0; ti < k_fsn; ++ti) {
+    pthread_join(mkdir_t[ti], &status);
   }
-  print_dir_tree(cnode(droot->d_inode));
+  print_dir_tree(cnode(iroot));
 
+  fprintf(stdout, "\nTest lookup:\n");
+  const int k_tn = 1;
+  pthread_t lookup_t[k_tn];
+  for (int i = 0; i < k_tn; ++i) {
+    int err = pthread_create(&lookup_t[i], NULL, rand_lookup, droot);
+    if (err) {
+      DEBUG_("[Error@main] return code from pthread_create() is %d.\n", err);
+    }
+  }
+  for (int i = 0; i < k_tn; ++i) {
+    pthread_join(lookup_t[i], &status);
+  }
+  fprintf(stdout, "\n%d/%d checked OK.\n", total_num_ok, NUM_LOOKUPS_);
+  
   // Kill file systems
   cinqfs.kill_sb(droot->d_sb);
   fsnode_free_all(fsroot);
+  
   return 0;
 }
 
