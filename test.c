@@ -89,7 +89,7 @@ static void make_fs_tree(struct cinq_fsnode *root) {
   }
 }
 
-// Example for invoking cinq_mkdir
+// Includes example for invoking cinq_mkdir
 static void *make_dir_tree(void *fsnode) {
   struct cinq_fsnode *fs = (struct cinq_fsnode *)fsnode;
   struct dentry *root = fs->fs_root;
@@ -99,19 +99,23 @@ static void *make_dir_tree(void *fsnode) {
   char buffer[MAX_NAME_LEN + 1];
   int mode = (CINQ_MERGE << CINQ_MODE_SHIFT) | S_IFDIR;
   
-  // make three-layer directory tree
+  // make three-layer directory tree for test
   for (i = mi; i < CNODE_CHILDREN_; ++i) {
-    struct inode *dir = root->d_inode;
+    // Example for invoking cinq_mkdir
+    // (1) prepare parameters
+    struct inode *dir = root->d_inode; // containing dir
     sprintf(buffer, "%x", i);
-    struct qstr dname =
+    struct qstr dname =                // new dir name passed via dentry
         { .name = (unsigned char *)buffer, .len = strlen(buffer) };
     struct dentry *den = d_alloc(root, &dname);
-    den->d_fsdata = (void *)fs->fs_id;
+    den->d_fsdata = (void *)fs->fs_id; // which client fs takes the operation
+    
+    // (2) invoke cinq_mkdir
     if (dir->i_op->mkdir(dir, den, mode)) {
       DEBUG_("[Error@make_dir_tree] failed to make dir '%s' by fs %lx(%s).\n",
              buffer, fs->fs_id, fs->fs_name);
       pthread_exit(NULL);
-    }
+    } // end of example
     
     for (j = mj; j < CNODE_CHILDREN_; ++j) {
       struct inode *subdir = den->d_inode;
@@ -147,7 +151,7 @@ static void *make_dir_tree(void *fsnode) {
 static spinlock_t num_ok_lock;
 static int total_num_ok = 0;
 
-// Example for invoking cinq_lookup
+// Includes example for invoking cinq_lookup
 static void *rand_lookup(void *droot) {
   // randomly choose client file system
   char fs_name[MAX_NAME_LEN + 1];
@@ -167,22 +171,35 @@ static void *rand_lookup(void *droot) {
     const int dir_j = rand() % (CNODE_CHILDREN_ + 1);
     const int dir_k = rand() % (CNODE_CHILDREN_ + 1);
     // lookup path "/fs_name/dir[1]/dir[2]/dir[3]"
-    sprintf(dir[0], "%s", fs_name);
-    sprintf(dir[1], "%x", dir_i);
+    sprintf(dir[0], "%s", fs_name); // the first segment is special
+    sprintf(dir[1], "%x", dir_i);   // the rest are normal ones under root
     sprintf(dir[2], "%s.%x", dir[1], dir_j);
     sprintf(dir[3], "%s.%x", dir[2], dir_k);
     
     // Omits dcache lookup.
     // Dentry cache should be firstly used in practice.
-    struct dentry *den = (struct dentry *)droot;
-    struct inode *inode = den->d_inode;
-    for (j = 0; j < k_num_seg; ++j) {
+    
+    // Example for invoking cinq_lookup
+    struct dentry *den =
+        (struct dentry *)droot;             // (1) start from super_block.s_root
+    struct inode *inode = den->d_inode;     //     and corresponding inode
+    
+    for (j = 0; j < k_num_seg; ++j) {       // (2) for each segment in the path
+      
+      // (3) prepare parameters
       struct qstr dname =
           { .name = (unsigned char *)dir[j], .len = strlen(dir[j]) };
       struct dentry *subden = d_alloc(den, &dname);
       subden->d_fsdata = den->d_fsdata;
+      
+      // (4) invoke cinq_lookup
       inode->i_op->lookup(inode, subden, NULL);
+      
+      // (5) retrieve lookup result
       if (!subden->d_inode) { // when target path is not found
+        
+        // The below part is only for test except step (6),
+        // and has nothing to do with example for invoking lookup.
         if (dir_i >= CNODE_CHILDREN_ || dir_j >= CNODE_CHILDREN_ ||
             dir_k >= CNODE_CHILDREN_) { // when it should be not-found
           result = "OK";
@@ -192,10 +209,12 @@ static void *rand_lookup(void *droot) {
         fprintf(stdout, "%s finds %s\t->\t - \t%s\n", fs_name, dir[j], result);
         break;
       } else {
+        // (6) prepare for next segment
         den = subden;
         inode = den->d_inode;
       }
-    } // for
+    } // continue next segment
+    
     if (j == k_num_seg) { // successful lookup
       result = "WRONG!";
       char *cur_fs_name = ((struct cinq_fsnode *)den->d_fsdata)->fs_name;
