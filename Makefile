@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -g -Wall -DCINQ_DEBUG -DHASH_DEBUG=1
+CFLAGS = -g -pthread -Wall -DCINQ_DEBUG -DHASH_DEBUG=1
 #CFLAGS = -Wall -O3
 LIB = -lpthread
 OBJDIR = Objects
@@ -20,4 +20,4 @@ dir :
 	mkdir -p $(OBJDIR)
 
 clean :
-	rm -r $(OBJDIR) test
+	rm -rf $(OBJDIR) test
