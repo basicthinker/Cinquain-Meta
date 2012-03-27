@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <inttypes.h>
+#include <sys/types.h>
 #include <string.h>
 #include <pthread.h>
 #include <time.h>
@@ -71,7 +72,6 @@ typedef uint32_t u32;
 typedef uint64_t u64;
 typedef long long loff_t;
 typedef unsigned fmode_t;
-typedef uint64_t blkcnt_t;
 
 typedef pthread_rwlock_t rwlock_t;
 #define RW_LOCK_UNLOCKED PTHREAD_RWLOCK_INITIALIZER

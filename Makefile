@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -std=c99 -Wall -DCINQ_DEBUG -DHASH_DEBUG=1 -O3
+CFLAGS = -Wall -DCINQ_DEBUG -DHASH_DEBUG=1 -O3
 LIB = -lpthread
 OBJDIR = Objects
 SRC := $(wildcard *.c)
