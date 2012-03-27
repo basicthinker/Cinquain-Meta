@@ -271,6 +271,7 @@ int main(int argc, const char * argv[]) {
   // Generates balanced dir/file tree on each file system
   const int k_fsn = HASH_CNT(fs_member, file_systems.fs_table);
   pthread_t mkdir_t[k_fsn];
+  memset(mkdir_t, 0, sizeof(mkdir_t));
   int ti = 0;
   for (fs = file_systems.fs_table; fs != NULL; fs = fs->fs_member.next) {
     int err = pthread_create(&mkdir_t[ti], NULL, make_dir_tree, fs);
@@ -288,6 +289,7 @@ int main(int argc, const char * argv[]) {
   fprintf(stdout, "\nTest lookup:\n");
   const int k_tn = 5; // number of threads
   pthread_t lookup_t[k_tn];
+  memset(lookup_t, 0, sizeof(lookup_t));
   int i;
   for (i = 0; i < k_tn; ++i) {
     int err = pthread_create(&lookup_t[i], NULL, rand_lookup, droot);

@@ -108,7 +108,7 @@ struct dentry *mount_nodev(struct file_system_type *fs_type,
   struct super_block *s = alloc_super_(fs_type);
   // set_anon_super(s, data);
   s->s_type = fs_type;
-  strlcpy(s->s_id, fs_type->name, sizeof(s->s_id));
+  strncpy(s->s_id, fs_type->name, sizeof(s->s_id));
   //  list_add_tail(&s->s_list, &super_blocks);
   //  list_add(&s->s_instances, &type->fs_supers);
   

@@ -70,8 +70,11 @@ typedef uint32_t __u32;
 typedef uint8_t u8;
 typedef uint32_t u32;
 typedef uint64_t u64;
-typedef long long loff_t;
 typedef unsigned fmode_t;
+
+#ifndef _SYS_TYPES_H // linux sys/types.h has defined loff_t
+typedef long long loff_t;
+#endif
 
 typedef pthread_rwlock_t rwlock_t;
 #define RW_LOCK_UNLOCKED PTHREAD_RWLOCK_INITIALIZER
