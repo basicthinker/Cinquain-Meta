@@ -101,6 +101,10 @@ static inline void * ERR_PTR(long error) { // include/linux/err.h
   return (void *) error;
 }
 
+static inline long PTR_ERR(const void *ptr) { // include/linux/err.h
+  return (long) ptr;
+}
+
 // include/asm-generic/errno-base.h
 #define	EPERM     1   /* Operation not permitted */
 #define	ENOENT    2   /* No such file or directory */

@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -DCINQ_DEBUG -DHASH_DEBUG=1 -O3
+CFLAGS = -std=c99 -Wall -DCINQ_DEBUG -DHASH_DEBUG=1 -O3
 LIB = -lpthread
 OBJDIR = Objects
 SRC := $(wildcard *.c)
@@ -11,7 +11,7 @@ test: $(OBJ)
 	$(CC) $(CFLAGS) $(LIB) -o $@ $^
 
 $(OBJDIR)/%.o : %.c
-	$(CC) -c -MMD $(FLAGS) -o $@ $<
+	$(CC) -c -MMD $(CFLAGS) -o $@ $<
 
 -include $(OBJDIR)/*.d
 

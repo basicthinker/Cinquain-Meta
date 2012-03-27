@@ -295,6 +295,15 @@ struct dentry *cinq_lookup(struct inode *dir, struct dentry *dentry,
 
 int cinq_create(struct inode *dir, struct dentry *dentry,
                 int mode, struct nameidata *nameidata) {
+  struct inode *inode = cinq_new_inode_(dir, mode, &dentry->d_name);
+  if (IS_ERR(inode)) {
+    return PTR_ERR(inode);
+  }
+  
+  inode->i_op = &cinq_file_inode_operations;
+  inode->i_fop = &cinq_file_operations;
+  mark_inode_dirty(inode);
+  
   return 0;
 }
 
