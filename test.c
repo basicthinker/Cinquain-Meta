@@ -26,8 +26,7 @@ static void print_fs_tree_(const int depth, const int no,
     fprintf(stdout, "  ");
   }
   // check global list
-  struct cinq_fsnode *fsnode;
-  HASH_FIND_BY_STR(fs_member, file_systems.fs_table, root->fs_name, fsnode);
+  struct cinq_fsnode *fsnode = find_file_system(&file_systems, root->fs_name);
   if (fsnode != root) {
     fprintf(stderr, "Error locating fsnode %lx: %p != %p\n",
             root->fs_id, fsnode, root);

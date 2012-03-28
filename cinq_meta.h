@@ -66,6 +66,23 @@ struct cinq_file_systems {
   struct cinq_fsnode *fs_table;
 };
 
+static inline struct cinq_fsnode *find_file_system(struct cinq_file_systems *table,
+                                                   const char *name) {
+  struct cinq_fsnode *fsnode;
+  HASH_FIND_BY_STR(fs_member, table->fs_table, name, fsnode);
+  return fsnode;
+}
+
+static inline void add_file_system(struct cinq_file_systems *table,
+                              struct cinq_fsnode *fs) {
+  HASH_ADD_BY_STR(fs_member, table->fs_table, fs_name, fs);
+}
+
+static inline void rm_file_system(struct cinq_file_systems *table,
+                             struct cinq_fsnode *fs) {
+  HASH_DELETE(fs_member, table->fs_table, fs);
+}
+
 struct cinq_inode;
 
 struct cinq_tag {
@@ -99,6 +116,7 @@ struct cinq_inode {
 static inline struct cinq_inode *cnode(const struct inode *inode) {
   return ((struct cinq_tag *)inode->i_ino)->t_host;
 }
+
 
 /* super.c */
 

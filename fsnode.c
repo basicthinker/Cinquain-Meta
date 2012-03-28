@@ -40,16 +40,15 @@ struct cinq_fsnode *fsnode_new(const char *name, struct cinq_fsnode *parent) {
   fsnode->fs_children = NULL; // required by uthash
   rwlock_init(&fsnode->fs_children_lock);
   
-  struct cinq_fsnode *dup;
   write_lock(&file_systems.lock);
-  HASH_FIND_BY_STR(fs_member, file_systems.fs_table, name, dup);
+  struct cinq_fsnode *dup = find_file_system(&file_systems, name);
   if (unlikely(dup)) {
     DEBUG_("[Warning@fsnode_new] duplicate names: %s\n", name);
     write_unlock(&file_systems.lock);
     fsnode_mfree(fsnode);
     return NULL;
   }
-  HASH_ADD_BY_STR(fs_member, file_systems.fs_table, fs_name, fsnode);
+  add_file_system(&file_systems, fsnode);
   write_unlock(&file_systems.lock);
   
   if (parent) {
@@ -69,12 +68,12 @@ void fsnode_free(struct cinq_fsnode *fsnode) {
   }
   
   write_lock(&file_systems.lock);
-  HASH_REMOVE(fs_member, file_systems.fs_table, fsnode);
+  rm_file_system(&file_systems, fsnode);
   write_unlock(&file_systems.lock);
   
   if (!fsnode_is_root(fsnode) && fsnode->fs_parent) {
     write_lock(&fsnode->fs_parent->fs_children_lock);
-    HASH_REMOVE(fs_child, fsnode->fs_parent->fs_children, fsnode);
+    HASH_DELETE(fs_child, fsnode->fs_parent->fs_children, fsnode);
     write_unlock(&fsnode->fs_parent->fs_children_lock);
   }
   fsnode_mfree(fsnode);
@@ -99,7 +98,7 @@ void fsnode_move(struct cinq_fsnode *child,
     return;
   }
   write_lock(&child->fs_parent->fs_children_lock);
-  HASH_REMOVE(fs_child, child->fs_parent->fs_children, child);
+  HASH_DELETE(fs_child, child->fs_parent->fs_children, child);
   write_unlock(&child->fs_parent->fs_children_lock);
 
   child->fs_parent = new_parent; // supposed to be atomic

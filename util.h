@@ -206,7 +206,5 @@ static inline long PTR_ERR(const void *ptr) { // include/linux/err.h
     HASH_FIND(hh, head, findptr, sizeof(void *), out)
 #define HASH_ADD_BY_PTR(hh, head, ptrfield, add) \
     HASH_ADD(hh, head, ptrfield, sizeof(void *), add)
-#define HASH_REMOVE(hh, head, delptr) \
-    HASH_DELETE(hh, head, delptr)
 
 #endif // CINQUAIN_META_UTIL_H_
