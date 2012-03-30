@@ -13,7 +13,7 @@
 #include "cinq_meta.h"
 
 static inline int inode_is_root_(const struct inode *inode) {
-  return ((struct cinq_tag *)inode->i_ino)->t_fs == META_FS;
+  return i_tag(inode)->t_fs == META_FS;
 }
 
 static inline int cnode_is_root_(const struct cinq_inode *cnode) {
@@ -21,14 +21,14 @@ static inline int cnode_is_root_(const struct cinq_inode *cnode) {
 }
 
 // @inode: whose i_ino is set to address of new tag.
-static inline struct cinq_tag *tag_new_(struct cinq_fsnode *fs,
+static inline struct cinq_tag *tag_new_(const struct cinq_fsnode *fs,
                                         enum cinq_inherit_type mode,
                                         struct inode *inode) {
   struct cinq_tag *tag = tag_malloc();
   if (unlikely(!tag)) {
     return NULL;
   }
-  tag->t_fs = fs;
+  tag->t_fs = (struct cinq_fsnode *)fs;
   tag->t_inode = inode;
   tag->t_mode = mode;
   tag->t_host = NULL;
@@ -145,53 +145,53 @@ static inline void cnode_rm_tag_(struct cinq_inode *cnode,
 
 // @dir: can be containing directory when adding new inode in it,
 //       or contained directory when its parents are tagged.
-static struct inode *cinq_new_inode_(struct inode *dir, int mode) {
+static struct inode *cinq_get_inode_(const struct inode *dir, int mode) {
   struct super_block *sb = dir->i_sb;
   struct inode * inode = new_inode(sb);
-  if (!inode) {
-    return ERR_PTR(-ENOMEM);
+  if (inode) {
+    inode_init_owner(inode, dir, mode);
+    // inode->i_ino is set when host tag is allocated
+    inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
+    // insert_inode_hash(inode);
+    switch (mode & S_IFMT) {
+      case S_IFREG:
+        inode->i_op = &cinq_file_inode_operations;
+        inode->i_fop = &cinq_file_operations;
+        break;
+      case S_IFDIR:
+        inode->i_op = &cinq_dir_inode_operations;
+        //	inode->i_fop = &simple_dir_operations;
+        /* directory inodes start off with i_nlink == 2 (for "." entry) */
+        inc_nlink(inode);
+        break;
+      case S_IFLNK:
+        //  inode->i_op = &page_symlink_inode_operations;
+        break;
+      default:
+        DEBUG_("[Warning@cinq_new_inode] mode not matched under %lx.\n",
+               dir->i_ino);
+        break;
+    }
+    mark_inode_dirty(inode);
   }
-  
-  inode_init_owner(inode, dir, mode);
-  // inode->i_ino is set when host tag is allocated
-  inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
-  // insert_inode_hash(inode);
-  switch (mode & S_IFMT) {
-		case S_IFREG:
-			inode->i_op = &cinq_file_inode_operations;
-			inode->i_fop = &cinq_file_operations;
-			break;
-		case S_IFDIR:
-			inode->i_op = &cinq_dir_inode_operations;
-      //	inode->i_fop = &simple_dir_operations;
-			/* directory inodes start off with i_nlink == 2 (for "." entry) */
-			inc_nlink(inode);
-			break;
-		case S_IFLNK:
-      //  inode->i_op = &page_symlink_inode_operations;
-			break;
-    default:
-			DEBUG_("[Warning@cinq_new_inode] mode not matched under %lx.\n",
-             dir->i_ino);
-			break;
-  }
-
-  mark_inode_dirty(inode);
   return inode;
 }
 
 // Contrary to convention that derives childen from parent
-static void cnode_tag_parents_(struct inode *child, struct cinq_fsnode *fs) {
-  struct cinq_inode *ci_child = cnode(child);
+static void cnode_tag_parents_(const struct inode *child,
+                               const struct cinq_fsnode *fs) {
+  struct cinq_inode *ci_child = i_cnode(child);
   struct cinq_inode *ci_parent = ci_child->ci_parent;
   while (!cnode_is_root_(ci_child) && ci_parent) {
-    struct inode *parent = cinq_new_inode_(child, child->i_mode);
+    struct inode *parent = cinq_get_inode_(child, child->i_mode);
     struct cinq_tag *tag = tag_new_(fs, CINQ_MERGE, parent);
     write_lock(&ci_parent->ci_tags_lock);
     cnode_add_tag_(ci_parent, tag);
     write_unlock(&ci_parent->ci_tags_lock);
+    
+    ci_child = ci_parent;
+    ci_parent = ci_child->ci_parent;
   }
-  
 }
 
 struct inode *cnode_make_tree(struct super_block *sb) {
@@ -215,30 +215,11 @@ struct inode *cnode_make_tree(struct super_block *sb) {
   return iroot;
 }
 
-int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
-  inode_inc_link_count(dir);
-  
-  struct cinq_inode *parent = cnode(dir);
+static int cinq_mknod(struct inode *dir, struct dentry *dentry, int mode) {
+  struct cinq_inode *parent = i_cnode(dir);
   struct cinq_inode *child;
   struct cinq_tag *tag;
   struct cinq_fsnode *fs = dentry->d_fsdata;
-  if (!fs) {
-    DEBUG_("[Error@cinq_mkdir] null fsnode for %s under dir %lx.\n",
-            dentry->d_name.name, dir->i_ino);
-    return -EFAULT;
-  }
-  
-  if (inode_is_root_(dir)) {
-    // registers new file system node
-    struct inode *fs_inode = cinq_new_inode_(dir, mode);
-    tag = tag_new_(fs, CINQ_MERGE, fs_inode);
-    d_instantiate(dentry, fs_inode);
-    fs->fs_root = dentry;
-    write_lock(&parent->ci_tags_lock);
-    cnode_add_tag_(parent, tag);
-    write_unlock(&parent->ci_tags_lock);
-    return 0;
-  }
   
   char *name = (char *)dentry->d_name.name;
   if (dentry->d_name.len > MAX_NAME_LEN) {
@@ -248,38 +229,101 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
   
   write_lock(&parent->ci_children_lock);
   child = cnode_find_child_(parent, name);
-  
   if (child) {
     write_unlock(&parent->ci_children_lock);
     
     write_lock(&child->ci_tags_lock);
     tag = cnode_find_tag_(child, fs);
     if (!tag) {
-      struct inode *inode = cinq_new_inode_(dir, mode);
-      tag = tag_new_(fs, 0, inode);
+      struct inode *inode = cinq_get_inode_(dir, mode);
+      if (!inode) return -ENOSPC;
+      tag = tag_new_(fs, mode >> CINQ_MODE_SHIFT, inode);
+      if (!tag) {
+        iput(inode);
+        return -ENOSPC;
+      }
       cnode_add_tag_(child, tag);
+    } else {
+      tag->t_mode = (mode >> CINQ_MODE_SHIFT);
+      inode_init_owner(tag->t_inode, dir, mode);
     }
-    tag->t_mode = (mode >> CINQ_MODE_SHIFT);
-    tag->t_inode->i_mode = (mode & I_MODE_FILTER);
     write_unlock(&child->ci_tags_lock);
     
   } else {
     child = cnode_new_(name);
-    struct inode *inode = cinq_new_inode_(dir, mode);
-    tag = tag_new_(fs, CINQ_MERGE, inode);
+    struct inode *inode = cinq_get_inode_(dir, mode);
+    if (!inode) return -ENOSPC;
+    tag = tag_new_(fs, mode >> CINQ_MODE_SHIFT, inode);
+    if (!tag) {
+      iput(inode);
+      return -ENOSPC;
+    }
     cnode_add_tag_(child, tag);
     cnode_add_child_(parent, child);
     write_unlock(&parent->ci_children_lock);
   }
+  
+  mark_inode_dirty(tag->t_inode);
   d_instantiate(dentry, tag->t_inode);
+  dget(dentry);
+  dir->i_mtime = dir->i_ctime = CURRENT_TIME;
+  
+  if (i_tag(dir)->t_fs != fs) {
+    cnode_tag_parents_(tag->t_inode, fs);
+  }
   return 0;
+}
+
+// Refer to definition comments in cinq-meta.h
+int cinq_create(struct inode *dir, struct dentry *dentry,
+                int mode, struct nameidata *nameidata) {
+  if (nameidata) {
+    dentry->d_fsdata = nameidata->path.dentry->d_fsdata;
+  } else if (!dentry->d_fsdata) {
+    DEBUG_("[Error@cinq_create] no fsnode is specified.\n");
+    return -EINVAL;
+  }
+  return cinq_mknod(dir, dentry, mode | S_IFREG);
+}
+
+int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
+  struct cinq_inode *parent = i_cnode(dir);
+  struct cinq_fsnode *fs = dentry->d_fsdata;
+  if (!fs) {
+    DEBUG_("[Error@cinq_mkdir] null fsnode for %s under dir %lx.\n",
+            dentry->d_name.name, dir->i_ino);
+    return -EINVAL;
+  }
+  
+  if (inode_is_root_(dir)) {
+    // registers new file system node
+    struct inode *fs_inode = cinq_get_inode_(dir, mode);
+    struct cinq_tag *tag = tag_new_(fs, mode >> CINQ_MODE_SHIFT, fs_inode);
+    fs->fs_root = dentry;
+    write_lock(&parent->ci_tags_lock);
+    cnode_add_tag_(parent, tag);
+    write_unlock(&parent->ci_tags_lock);
+    
+    mark_inode_dirty(fs_inode);
+    d_instantiate(dentry, fs_inode);
+    dget(dentry);
+    dir->i_mtime = dir->i_ctime = CURRENT_TIME;
+    
+    return 0;
+  }
+
+  int err = cinq_mknod(dir, dentry, mode | S_IFDIR);
+  if (!err) {
+     inode_inc_link_count(dir);
+  }
+  return err;
 }
 
 // @fsnode: in-out parameter
 static inline struct inode *cinq_lookup_(const struct inode *dir,
                                          const char *name,
                                          struct cinq_fsnode **fs_p) {
-  struct cinq_inode *parent = cnode(dir);
+  struct cinq_inode *parent = i_cnode(dir);
   if (inode_is_root_(dir)) {
     struct cinq_fsnode *fs;
     read_lock(&file_systems.lock);
@@ -320,6 +364,7 @@ static inline struct inode *cinq_lookup_(const struct inode *dir,
   // No inodes are cached or added to super_block inode list.
 }
 
+// Refer to definition comments in cinq-meta.h
 struct dentry *cinq_lookup(struct inode *dir, struct dentry *dentry,
                            struct nameidata *nameidata) {
   if (dentry->d_name.len >= MAX_NAME_LEN)
@@ -334,20 +379,6 @@ struct dentry *cinq_lookup(struct inode *dir, struct dentry *dentry,
     return ERR_PTR(-EIO);
   }
   return d_splice_alias(inode, dentry);
-}
-
-int cinq_create(struct inode *dir, struct dentry *dentry,
-                int mode, struct nameidata *nameidata) {
-  struct inode *inode = cinq_new_inode_(dir, mode);
-  if (IS_ERR(inode)) {
-    return PTR_ERR(inode);
-  }
-  
-  inode->i_op = &cinq_file_inode_operations;
-  inode->i_fop = &cinq_file_operations;
-  mark_inode_dirty(inode);
-  
-  return 0;
 }
 
 int cinq_link(struct dentry *old_dentry, struct inode *dir,

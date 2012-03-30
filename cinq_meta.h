@@ -55,11 +55,10 @@ extern void fsnode_move(struct cinq_fsnode *child,
 extern void fsnode_bridge(struct cinq_fsnode *out);
 
 enum cinq_inherit_type {
-  CINQ_OVERWR = 1,
-  CINQ_MERGE = 2
+  CINQ_MERGE = 0,
+  CINQ_OVERWR = 1
 };
 #define CINQ_MODE_SHIFT 30
-#define I_MODE_FILTER 01111111111
 
 struct cinq_file_systems {
   rwlock_t lock;
@@ -96,6 +95,10 @@ struct cinq_tag {
   UT_hash_handle hh; // default handle name
 };
 
+static inline struct cinq_tag *i_tag(const struct inode *inode) {
+  return (struct cinq_tag *)inode->i_ino;
+}
+
 struct cinq_inode {
   unsigned long ci_id;
   char ci_name[MAX_NAME_LEN + 1];
@@ -113,8 +116,8 @@ struct cinq_inode {
 // Therefore no public alloc/free-like functions are provided.
 
 // Retrieves cinq_inode pointer from inode
-static inline struct cinq_inode *cnode(const struct inode *inode) {
-  return ((struct cinq_tag *)inode->i_ino)->t_host;
+static inline struct cinq_inode *i_cnode(const struct inode *inode) {
+  return i_tag(inode)->t_host;
 }
 
 
@@ -141,6 +144,15 @@ extern int cinq_write_inode(struct inode *inode, struct writeback_control *wbc);
 //    this parameter can be set null.
 extern struct dentry *cinq_lookup(struct inode *dir, struct dentry *dentry,
                                   struct nameidata *nameidata);
+
+// @dentry: a negative dentry, namely whose d_inode is null.
+//    dentry->d_fsdata should better contains cinq_fsnode.fs_id that specifies
+//    the file system (cinq_fsnode) to take the operation. Otherwise,
+//    the nameidata is used to get the fsnode.
+//    dentry->d_name contains the name of target.
+// @nameidata: reserves the result of last segment.
+//    If the fsnode is specified via dentry->d_fsdata,
+//    this parameter can be set null.
 extern int cinq_create(struct inode *dir, struct dentry *dentry,
                 int mode, struct nameidata *nameidata);
 extern int cinq_link(struct dentry *old_dentry, struct inode *dir,

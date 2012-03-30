@@ -54,7 +54,7 @@ struct dentry *cinq_mount (struct file_system_type *fs_type, int flags,
 
 void cinq_kill_sb (struct super_block *sb) {
   if (sb->s_root) {
-    cnode_free_all(cnode(sb->s_root->d_inode));
+    cnode_free_all(i_cnode(sb->s_root->d_inode));
     d_genocide(sb->s_root);
   }
   DEBUG_ON_(!sb->s_root, "[Warning@cinq_kill_sb]: invoked on null dentry.\n");

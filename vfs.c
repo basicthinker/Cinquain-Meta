@@ -268,18 +268,6 @@ struct inode *new_inode(struct super_block *sb) {
 	return inode;
 }
 
-// fs/inode.c
-void destroy_inode(struct inode *inode) {
-  // BUG_ON(!list_empty(&inode->i_lru));
-  // __destroy_inode(inode);
-  if (inode->i_sb->s_op->destroy_inode)
-    inode->i_sb->s_op->destroy_inode(inode);
-  else
-    // call_rcu(&inode->i_rcu, i_callback);
-    free(inode);
-}
-
-
 // fs/fs-writeback.c
 /**
  *	__mark_inode_dirty -	internal function
@@ -400,29 +388,6 @@ static inline void mark_inode_dirty_(struct inode *inode, int flags)
 
 void mark_inode_dirty(struct inode *inode) {
   mark_inode_dirty_(inode, I_DIRTY);
-}
-
-void inode_inc_link_count(struct inode *inode) {
-  inc_nlink(inode);
-  mark_inode_dirty(inode);
-}
-
-/**
- * inode_init_owner - Init uid,gid,mode for new inode according to posix standards
- * @inode: New inode
- * @dir: Directory inode
- * @mode: mode of the new inode
- */
-void inode_init_owner(struct inode *inode, const struct inode *dir,
-                      mode_t mode) {
-	inode->i_uid = current_fsuid();
-	if (dir && dir->i_mode & S_ISGID) {
-		inode->i_gid = dir->i_gid;
-		if (S_ISDIR(mode))
-			mode |= S_ISGID;
-	} else
-		inode->i_gid = current_fsgid();
-	inode->i_mode = mode;
 }
 
 #endif // __KERNEL__

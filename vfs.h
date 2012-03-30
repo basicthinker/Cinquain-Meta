@@ -227,7 +227,7 @@ struct inode {
   struct list_head	i_dentry; // replaces the above
   
 	unsigned long		i_ino;
-  //	atomic_t        i_count;
+  atomic_t        i_count;
 	unsigned int		i_nlink;
 	dev_t           i_rdev;
 	unsigned int		i_blkbits;
@@ -484,10 +484,6 @@ struct file_operations {
                     loff_t len);
 };
 
-static inline void inc_nlink(struct inode *inode) {
-  inode->i_nlink++;
-}
-
 
 // stub.c
 /* Stub functions with user-space implementation */
@@ -522,11 +518,18 @@ extern struct dentry *mount_nodev(struct file_system_type *fs_type,
  */
 extern struct inode *new_inode(struct super_block *sb);
 
-extern void destroy_inode(struct inode *inode);
-
 extern void mark_inode_dirty(struct inode *inode);
 
-extern void inode_inc_link_count(struct inode *inode);
+
+// include/linux/fs.h
+static inline void inc_nlink(struct inode *inode) {
+  inode->i_nlink++;
+}
+
+static inline void inode_inc_link_count(struct inode *inode) {
+  inc_nlink(inode);
+  mark_inode_dirty(inode);
+}
 
 /**
  * inode_init_owner - Init uid,gid,mode for new inode according to posix standards
@@ -534,7 +537,48 @@ extern void inode_inc_link_count(struct inode *inode);
  * @dir: Directory inode
  * @mode: mode of the new inode
  */
-extern void inode_init_owner(struct inode *inode, const struct inode *dir,
-                             mode_t mode);
+static inline void inode_init_owner(struct inode *inode, const struct inode *dir,
+                                    mode_t mode) {
+	inode->i_uid = current_fsuid();
+	if (dir && dir->i_mode & S_ISGID) {
+		inode->i_gid = dir->i_gid;
+		if (S_ISDIR(mode))
+			mode |= S_ISGID;
+	} else
+		inode->i_gid = current_fsgid();
+	inode->i_mode = mode;
+}
+
+// fs/inode.c
+static inline void destroy_inode(struct inode *inode) {
+  // BUG_ON(!list_empty(&inode->i_lru));
+  // __destroy_inode(inode);
+  if (inode->i_sb->s_op->destroy_inode)
+    inode->i_sb->s_op->destroy_inode(inode);
+  else
+    // call_rcu(&inode->i_rcu, i_callback);
+    free(inode);
+}
+
+/**
+ *      iput    - put an inode
+ *      @inode: inode to put
+ *
+ *      Puts an inode, dropping its usage count. If the inode use count hits
+ *      zero, the inode is then freed and may also be destroyed.
+*/
+static inline void iput(struct inode *inode) {
+  if (inode) {
+    DEBUG_ON_(inode->i_state & I_CLEAR,
+              "[Bug@iput] violating kernel specification.\n");
+    // if (atomic_dec_and_lock(&inode->i_count, &inode->i_lock))
+    if (atomic_dec_and_test(&inode->i_count)) {
+      // spin_lock(&inode->i_lock);
+      // iput_final(inode);
+      destroy_inode(inode);
+    }
+  }
+}
+  
 #endif // __KERNEL__
 #endif // CINQUAIN_META_VFS_H_

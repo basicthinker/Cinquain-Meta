@@ -284,7 +284,7 @@ int main(int argc, const char * argv[]) {
     iroot->i_op->mkdir(iroot, den, mode); // first parameter is root inode.
   }
   fprintf(stdout, "\nAfter file system registeration:\n");
-  print_dir_tree(cnode(iroot));
+  print_dir_tree(i_cnode(iroot));
   
   // Generates balanced dir/file tree on each file system
   const int k_fsn = HASH_CNT(fs_member, file_systems.fs_table);
@@ -302,7 +302,7 @@ int main(int argc, const char * argv[]) {
   for (ti = 0; ti < k_fsn; ++ti) {
     pthread_join(mkdir_t[ti], &status);
   }
-  print_dir_tree(cnode(iroot));
+  print_dir_tree(i_cnode(iroot));
 
   fprintf(stdout, "\nTest lookup:\n");
   const int k_tn = 5; // number of threads
