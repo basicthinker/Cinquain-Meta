@@ -13,7 +13,9 @@ static int cinq_fill_super_(struct super_block *sb, void *data, int silent) {
   struct inode *inode = NULL;
 	struct dentry *root;
   // int err;
-  // save_mount_options(sb, data);
+#ifdef __KERNEL__
+  save_mount_options(sb, data);
+#endif
 	// err = cinq_parse_options(data, &fsi->mount_opts);
   
 	sb->s_maxbytes = MAX_LFS_FILESIZE;
@@ -28,22 +30,12 @@ static int cinq_fill_super_(struct super_block *sb, void *data, int silent) {
 		return -ENOMEM;
 	}
   
-	// root = d_alloc_root(inode); // expanded as following
-  static const struct qstr name = { .name = (unsigned char *)"/", .len = 1 };
-  root = d_alloc(NULL, &name);
-  if (root) {
-    root->d_sb = inode->i_sb;
-    // d_set_d_op(root, root->d_sb->s_d_op);
-    root->d_parent = root;
-    d_instantiate(root, inode);
-  }
-  
-	sb->s_root = root;
-	if (!root) {
-		return -ENOMEM;
+	root = d_alloc_root(inode);
+  sb->s_root = root;
+  if (!root) {
+    cnode_free_all(i_cnode(inode));
+    return -ENOMEM;
 	}
-
-  // iput(inode);
   return 0;
 }
 

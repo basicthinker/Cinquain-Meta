@@ -579,6 +579,32 @@ static inline void iput(struct inode *inode) {
     }
   }
 }
+
+/**
+ * d_alloc_root - allocate root dentry
+ * @root_inode: inode to allocate the root for
+ *
+ * Allocate a root ("/") dentry for the inode given. The inode is
+ * instantiated and returned. %NULL is returned if there is insufficient
+ * memory or the inode passed is %NULL.
+ */
+static inline struct dentry * d_alloc_root(struct inode * root_inode)
+{
+	struct dentry *res = NULL;
+  
+	if (root_inode) {
+		static const struct qstr name = { .name = (unsigned char *)"/", .len = 1 };
+    
+		res = d_alloc(NULL, &name);
+		if (res) {
+			res->d_sb = root_inode->i_sb;
+			// d_set_d_op(res, res->d_sb->s_d_op);
+			res->d_parent = res;
+			d_instantiate(res, root_inode);
+		}
+	}
+	return res;
+}
   
 #endif // __KERNEL__
 #endif // CINQUAIN_META_VFS_H_

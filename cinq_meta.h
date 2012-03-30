@@ -90,7 +90,7 @@ struct cinq_tag {
   struct inode *t_inode; // whose i_no points to this tag
 
   enum cinq_inherit_type t_mode;
-  char in_file_handle[FILE_HASH_WIDTH];
+  unsigned char t_file_handle[FILE_HASH_WIDTH];
 
   UT_hash_handle hh; // default handle name
 };

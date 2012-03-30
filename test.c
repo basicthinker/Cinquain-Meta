@@ -147,10 +147,39 @@ static void *make_dir_tree(void *fsnode) {
   pthread_exit(NULL);
 }
 
+static struct dentry *path_lookup_(struct dentry *droot,
+                                   char seg[][MAX_NAME_LEN],
+                                   const int num) {
+  // Example for invoking cinq_lookup
+  struct dentry *den = droot;           // (1) start from super_block.s_root
+  struct inode *inode = den->d_inode;   //     and corresponding inode
+  
+  for (int i = 0; i < num; ++i) {       // (2) for each segment in the path
+    
+    // (3) prepare parameters
+    struct qstr dname =
+        { .name = (unsigned char *)seg[i], .len = strlen(seg[i]) };
+    struct dentry *subden = d_alloc(den, &dname);
+    subden->d_fsdata = den->d_fsdata;
+    
+    // (4) invoke cinq_lookup
+    inode->i_op->lookup(inode, subden, NULL);
+    
+    // (5) retrieve lookup result
+    if (!subden->d_inode) { // when target path is not found
+      return NULL;
+    }
+    // (6) prepare for next segment
+    den = subden;
+    inode = den->d_inode;
+  } // continue next segment
+
+  return den;
+}
+
 static spinlock_t num_ok_lock;
 static int total_num_ok = 0;
 
-// Includes example for invoking cinq_lookup
 static void *rand_lookup(void *droot) {
   // randomly choose client file system
   char fs_name[MAX_NAME_LEN + 1];
@@ -162,8 +191,7 @@ static void *rand_lookup(void *droot) {
   char dir[k_num_seg][MAX_NAME_LEN + 1];
   char *result = "OK";
   int num_ok = 0;
-  int i, j;
-  for (i = 0; i < NUM_LOOKUPS_; ++i) {
+  for (int i = 0; i < NUM_LOOKUPS_; ++i) {
     // manually fills dir segments
     // which should be parsed from path in practice
     const int dir_i = rand() % (CNODE_CHILDREN_ + 1);
@@ -178,43 +206,17 @@ static void *rand_lookup(void *droot) {
     // Omits dcache lookup.
     // Dentry cache should be firstly used in practice.
     
-    // Example for invoking cinq_lookup
-    struct dentry *den =
-        (struct dentry *)droot;             // (1) start from super_block.s_root
-    struct inode *inode = den->d_inode;     //     and corresponding inode
-    
-    for (j = 0; j < k_num_seg; ++j) {       // (2) for each segment in the path
-      
-      // (3) prepare parameters
-      struct qstr dname =
-          { .name = (unsigned char *)dir[j], .len = strlen(dir[j]) };
-      struct dentry *subden = d_alloc(den, &dname);
-      subden->d_fsdata = den->d_fsdata;
-      
-      // (4) invoke cinq_lookup
-      inode->i_op->lookup(inode, subden, NULL);
-      
-      // (5) retrieve lookup result
-      if (!subden->d_inode) { // when target path is not found
-        
-        // The below part is only for test except step (6),
-        // and has nothing to do with example for invoking lookup.
-        if (dir_i >= CNODE_CHILDREN_ || dir_j >= CNODE_CHILDREN_ ||
-            dir_k >= CNODE_CHILDREN_) { // when it should be not-found
-          result = "OK";
-        } else {
-          result = "WRONG!";
-        }
-        fprintf(stdout, "%s finds %s\t->\t - \t%s\n", fs_name, dir[j], result);
-        break;
+    struct dentry *den = path_lookup_(droot, (void *)dir, k_num_seg);
+    if (!den) { // when target path is not found
+      if (dir_i >= CNODE_CHILDREN_ || dir_j >= CNODE_CHILDREN_ ||
+          dir_k >= CNODE_CHILDREN_) { // when it should be not-found
+        result = "OK";
       } else {
-        // (6) prepare for next segment
-        den = subden;
-        inode = den->d_inode;
+        result = "WRONG!";
       }
-    } // continue next segment
-    
-    if (j == k_num_seg) { // successful lookup
+      fprintf(stdout, "%s finds %s\t->\t - \t%s\n",
+              fs_name, dir[k_num_seg - 1], result);
+    } else { // successful lookup
       result = "WRONG!";
       char *cur_fs_name = ((struct cinq_fsnode *)den->d_fsdata)->fs_name;
       if (strcmp(fs_name, cur_fs_name)) { // not identical
@@ -233,7 +235,7 @@ static void *rand_lookup(void *droot) {
       } else if (fs_j <= dir_j && fs_k <= dir_k) {
         result = "OK"; // when file system not changed
       }
-      fprintf(stdout, "%s finds %s\t->\t%s\t%s\n", fs_name, dir[j - 1],
+      fprintf(stdout, "%s finds %s\t->\t%s\t%s\n", fs_name, dir[k_num_seg - 1],
               cur_fs_name, result);
     }
     if (strcmp(result, "OK") == 0) ++num_ok;
@@ -243,6 +245,12 @@ static void *rand_lookup(void *droot) {
   spin_unlock(&num_ok_lock);
   pthread_exit(NULL);
 }
+
+// Includes example for invoking cinq_create
+static void *create_and_lookup(void *data) {
+  pthread_exit(NULL);
+}
+
 
 int main(int argc, const char * argv[]) {
   struct cinq_fsnode *fsroot = fsnode_new("0_0_0", NULL);
@@ -318,7 +326,9 @@ int main(int argc, const char * argv[]) {
   for (i = 0; i < k_tn; ++i) {
     pthread_join(lookup_t[i], &status);
   }
-  fprintf(stdout, "\n%d/%d checked OK.\n", total_num_ok, NUM_LOOKUPS_ * k_tn);
+  int expected_num = NUM_LOOKUPS_ * k_tn;
+  fprintf(stdout, "\n%d/%d checked OK [%s].\n", total_num_ok, expected_num,
+          total_num_ok < expected_num ? "NOT PASSED" : "PASSED");
   
   // Kill file systems
   cinqfs.kill_sb(droot->d_sb);
