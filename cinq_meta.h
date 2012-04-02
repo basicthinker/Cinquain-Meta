@@ -31,7 +31,7 @@ struct cinq_fsnode {
   UT_hash_handle fs_member; // used for global file system list
 };
 
-static inline int fsnode_is_root(struct cinq_fsnode *fsnode) {
+static inline int fsnode_is_root(const struct cinq_fsnode *fsnode) {
   return fsnode->fs_parent == fsnode;
 }
 
@@ -60,27 +60,29 @@ enum cinq_inherit_type {
 };
 #define CINQ_MODE_SHIFT 30
 
+
 struct cinq_file_systems {
   rwlock_t lock;
   struct cinq_fsnode *fs_table;
 };
 
-static inline struct cinq_fsnode *find_file_system(struct cinq_file_systems *table,
-                                                   const char *name) {
+static inline struct cinq_fsnode *cfs_find(struct cinq_file_systems *table,
+                                           const char *name) {
   struct cinq_fsnode *fsnode;
   HASH_FIND_BY_STR(fs_member, table->fs_table, name, fsnode);
   return fsnode;
 }
 
-static inline void add_file_system(struct cinq_file_systems *table,
-                              struct cinq_fsnode *fs) {
+static inline void cfs_add(struct cinq_file_systems *table,
+                           struct cinq_fsnode *fs) {
   HASH_ADD_BY_STR(fs_member, table->fs_table, fs_name, fs);
 }
 
-static inline void rm_file_system(struct cinq_file_systems *table,
-                             struct cinq_fsnode *fs) {
+static inline void cfs_rm(struct cinq_file_systems *table,
+                          struct cinq_fsnode *fs) {
   HASH_DELETE(fs_member, table->fs_table, fs);
 }
+
 
 struct cinq_inode;
 
@@ -98,6 +100,15 @@ struct cinq_tag {
 static inline struct cinq_tag *i_tag(const struct inode *inode) {
   return (struct cinq_tag *)inode->i_ino;
 }
+
+static inline struct cinq_fsnode *i_fs(const struct inode *inode) {
+  return i_tag(inode)->t_fs;
+}
+
+static inline struct cinq_fsnode *d_fs(const struct dentry *dentry) {
+  return i_tag(dentry->d_inode)->t_fs;
+}
+
 
 struct cinq_inode {
   unsigned long ci_id;

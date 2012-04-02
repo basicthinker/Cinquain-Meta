@@ -17,7 +17,11 @@
 /* Test config */
 #define FS_CHILDREN_ 3
 #define CNODE_CHILDREN_ 5 // should be larger than FS_CHILDREN_
-#define NUM_LOOKUPS_ 50
+
+#define NUM_LOOKUP_ 50
+#define LOOKUP_THR_NUM_ 5 // number of threads for rand_lookup
+#define NUM_CREATE_ 10
+#define CREATE_THR_NUM_ 5
 
 static void print_fs_tree_(const int depth, const int no,
                           struct cinq_fsnode *root) {
@@ -26,7 +30,7 @@ static void print_fs_tree_(const int depth, const int no,
     fprintf(stdout, "  ");
   }
   // check global list
-  struct cinq_fsnode *fsnode = find_file_system(&file_systems, root->fs_name);
+  struct cinq_fsnode *fsnode = cfs_find(&file_systems, root->fs_name);
   if (fsnode != root) {
     fprintf(stderr, "Error locating fsnode %lx: %p != %p\n",
             root->fs_id, fsnode, root);
@@ -147,10 +151,10 @@ static void *make_dir_tree(void *fsnode) {
   pthread_exit(NULL);
 }
 
+// Example for invoking cinq_lookup
 static struct dentry *path_lookup_(struct dentry *droot,
-                                   char seg[][MAX_NAME_LEN],
+                                   char seg[][MAX_NAME_LEN + 1],
                                    const int num) {
-  // Example for invoking cinq_lookup
   struct dentry *den = droot;           // (1) start from super_block.s_root
   struct inode *inode = den->d_inode;   //     and corresponding inode
   
@@ -177,10 +181,11 @@ static struct dentry *path_lookup_(struct dentry *droot,
   return den;
 }
 
-static spinlock_t num_ok_lock;
-static int total_num_ok = 0;
+static spinlock_t lookup_num_lock_;
+static int lookup_num_ok_ = 0;
 
-static void *rand_lookup(void *droot) {
+// Includes example for invoking cinq_create
+static void *rand_lookup_(void *droot) {
   // randomly choose client file system
   char fs_name[MAX_NAME_LEN + 1];
   const int fs_j = rand() % FS_CHILDREN_ + 1;
@@ -189,9 +194,9 @@ static void *rand_lookup(void *droot) {
   
   const int k_num_seg = 4;
   char dir[k_num_seg][MAX_NAME_LEN + 1];
-  char *result = "OK";
+  int pass;
   int num_ok = 0;
-  for (int i = 0; i < NUM_LOOKUPS_; ++i) {
+  for (int i = 0; i < NUM_LOOKUP_; ++i) {
     // manually fills dir segments
     // which should be parsed from path in practice
     const int dir_i = rand() % (CNODE_CHILDREN_ + 1);
@@ -206,51 +211,129 @@ static void *rand_lookup(void *droot) {
     // Omits dcache lookup.
     // Dentry cache should be firstly used in practice.
     
-    struct dentry *den = path_lookup_(droot, (void *)dir, k_num_seg);
-    if (!den) { // when target path is not found
+    struct dentry *found_dent = path_lookup_(droot, (void *)dir, k_num_seg);
+    if (!found_dent) { // when target path is not found
       if (dir_i >= CNODE_CHILDREN_ || dir_j >= CNODE_CHILDREN_ ||
           dir_k >= CNODE_CHILDREN_) { // when it should be not-found
-        result = "OK";
+        pass = 1;
       } else {
-        result = "WRONG!";
+        pass = 0;
       }
-      fprintf(stdout, "%s finds %s\t->\t - \t%s\n",
-              fs_name, dir[k_num_seg - 1], result);
     } else { // successful lookup
-      result = "WRONG!";
-      char *cur_fs_name = ((struct cinq_fsnode *)den->d_fsdata)->fs_name;
+      pass = 0;
+      char *cur_fs_name = d_fs(found_dent)->fs_name;
       if (strcmp(fs_name, cur_fs_name)) { // not identical
-        // when parent file system is used
+        // when ancestor is used
         if (fs_j > dir_j) { // root file system should be used
           if (strcmp(cur_fs_name, "0_0_0") == 0) {
-            result = "OK";
+            pass = 1;
           }
         } else if (fs_k > dir_k) { // second layer file system shoud be used
           int cur_j, cur_k;
           sscanf(cur_fs_name, "0_%x_%x", &cur_j, &cur_k);
           if (cur_j == fs_j && cur_k == 0) {
-            result = "OK";
+            pass = 1;
           }
         }
       } else if (fs_j <= dir_j && fs_k <= dir_k) {
-        result = "OK"; // when file system not changed
+        pass = 1; // when file system not changed
       }
-      fprintf(stdout, "%s finds %s\t->\t%s\t%s\n", fs_name, dir[k_num_seg - 1],
-              cur_fs_name, result);
     }
-    if (strcmp(result, "OK") == 0) ++num_ok;
+    fprintf(stdout, "%s finds %s\t->\t%s\t%s\n",
+            fs_name, dir[k_num_seg - 1], 
+            found_dent ? d_fs(found_dent)->fs_name : "-",
+            pass ? "OK" : "WRONG");
+    if (pass) ++num_ok;
   } // for
-  spin_lock(&num_ok_lock);
-  total_num_ok += num_ok;
-  spin_unlock(&num_ok_lock);
+  spin_lock(&lookup_num_lock_);
+  lookup_num_ok_ += num_ok;
+  spin_unlock(&lookup_num_lock_);
   pthread_exit(NULL);
 }
+
+static spinlock_t create_num_lock_;
+static int create_num_ok_ = 0;
 
 // Includes example for invoking cinq_create
-static void *create_and_lookup(void *data) {
+static void *rand_create_(void *droot) {
+  // randomly choose client file system
+  char fs_name[MAX_NAME_LEN + 1];
+  const int fs_j = rand() % FS_CHILDREN_ + 1;
+  const int fs_k = rand() % (FS_CHILDREN_ + 1);
+  sprintf(fs_name, "0_%x_%x", fs_j, fs_k);
+  
+  const int k_num_seg = 4;
+  char dir[k_num_seg][MAX_NAME_LEN + 1];
+  int num_ok = 0;
+  for (int i = 0; i < NUM_CREATE_; ++i) {
+    // manually fills dir segments
+    // which should be parsed from path in practice
+    const int dir_i = rand() % CNODE_CHILDREN_;
+    const int dir_j = rand() % CNODE_CHILDREN_;
+    const int dir_k = rand() % CNODE_CHILDREN_;
+    if (fs_j <= dir_j && fs_k <= dir_k) {
+      --i;
+      continue;
+    }
+    
+    // lookup path "/fs_name/dir[1]/dir[2]/dir[3]"
+    sprintf(dir[0], "%s", fs_name); // the first segment is special
+    sprintf(dir[1], "%x", dir_i);   // the rest are normal ones under root
+    sprintf(dir[2], "%s.%x", dir[1], dir_j);
+    sprintf(dir[3], "%s.%x", dir[2], dir_k);
+    
+    // Omits dcache lookup.
+    // Dentry cache should be firstly used in practice.
+    
+    struct dentry *found_dent = path_lookup_(droot, (void *)dir, k_num_seg);
+    if (!found_dent || strcmp(fs_name, d_fs(found_dent)->fs_name) == 0) {
+      --i;
+      continue;
+    }
+    
+    // Example for invoking cinq_create
+    struct inode *container = found_dent->d_inode;
+    int mode = (CINQ_MERGE << CINQ_MODE_SHIFT) | S_IFREG;
+    char file_name[MAX_NAME_LEN + 1];
+    sprintf(file_name, "%d", rand());
+    struct qstr q_file_name =
+        { .name = (unsigned char *)file_name, .len = strlen(file_name) };
+    struct dentry *file_dent = d_alloc(found_dent, &q_file_name);
+    // The fsnode can be determined by various ways.
+    // Note that this is who takes the operation,
+    // NOT always be d_fs(found_dent) who can be an ancestor.
+    read_lock(&file_systems.lock);
+    struct cinq_fsnode *req_fs = cfs_find(&file_systems, fs_name);
+    read_unlock(&file_systems.lock);
+    file_dent->d_fsdata = req_fs;
+    
+    if (container->i_op->create(container, file_dent, mode, NULL)) {
+      DEBUG_("[Error@rand_create] failed to create %s@%s.\n",
+             file_name, i_cnode(found_dent->d_inode)->ci_name);
+      continue;
+    } 
+    
+    // repeat lookup to check
+    // the following is only for test purpose
+    int pass = 1;
+    char dir_file[k_num_seg + 1][MAX_NAME_LEN + 1];
+    memcpy(dir_file, dir, sizeof(dir));
+    strncpy(dir_file[k_num_seg], file_name, q_file_name.len + 1);
+    found_dent = path_lookup_(droot, (void *)dir_file, k_num_seg + 1);
+    if (!found_dent || d_fs(found_dent) != req_fs) {
+      pass = 0;
+    }
+    fprintf(stdout, "rand_create_: %s(%s) -> %s(%s)\t%s\n",
+            dir[k_num_seg - 1], fs_name,
+            file_name, found_dent ? d_fs(found_dent)->fs_name : "-",
+            pass ? "OK" : "WRONG");
+    if (pass) ++num_ok;
+  } // for
+  spin_lock(&create_num_lock_);
+  create_num_ok_ += num_ok;
+  spin_unlock(&create_num_lock_);
   pthread_exit(NULL);
 }
-
 
 int main(int argc, const char * argv[]) {
   struct cinq_fsnode *fsroot = fsnode_new("0_0_0", NULL);
@@ -313,22 +396,38 @@ int main(int argc, const char * argv[]) {
   print_dir_tree(i_cnode(iroot));
 
   fprintf(stdout, "\nTest lookup:\n");
-  const int k_tn = 5; // number of threads
-  pthread_t lookup_t[k_tn];
-  memset(lookup_t, 0, sizeof(lookup_t));
-  int i;
-  for (i = 0; i < k_tn; ++i) {
-    int err = pthread_create(&lookup_t[i], NULL, rand_lookup, droot);
+  pthread_t lookup_thr[LOOKUP_THR_NUM_];
+  memset(lookup_thr, 0, sizeof(lookup_thr));
+  for (int i = 0; i < LOOKUP_THR_NUM_; ++i) {
+    int err = pthread_create(&lookup_thr[i], NULL, rand_lookup_, droot);
     if (err) {
       DEBUG_("[Error@main] return code from pthread_create() is %d.\n", err);
     }
   }
-  for (i = 0; i < k_tn; ++i) {
-    pthread_join(lookup_t[i], &status);
+  for (int i = 0; i < LOOKUP_THR_NUM_; ++i) {
+    pthread_join(lookup_thr[i], &status);
   }
-  int expected_num = NUM_LOOKUPS_ * k_tn;
-  fprintf(stdout, "\n%d/%d checked OK [%s].\n", total_num_ok, expected_num,
-          total_num_ok < expected_num ? "NOT PASSED" : "PASSED");
+  
+  fprintf(stdout, "\nTest create:\n");
+  pthread_t create_thr[CREATE_THR_NUM_];
+  memset(create_thr, 0, sizeof(create_thr));
+  for (int i = 0; i < CREATE_THR_NUM_; ++i) {
+    int err = pthread_create(&create_thr[i], NULL, rand_create_, droot);
+    if (err) {
+      DEBUG_("[Error@main] return code from pthread_create() is %d.\n", err);
+    }
+  }
+  for (int i = 0; i < CREATE_THR_NUM_; ++i) {
+    pthread_join(create_thr[i], &status);
+  }
+  
+  int expected_num = NUM_LOOKUP_ * LOOKUP_THR_NUM_;
+  fprintf(stdout, "\nlookup: %d/%d checked OK [%s].\n", lookup_num_ok_, expected_num,
+          lookup_num_ok_ < expected_num ? "NOT PASSED" : "PASSED");
+  
+  expected_num = NUM_CREATE_ * CREATE_THR_NUM_;
+  fprintf(stdout, "create: %d/%d checked OK [%s].\n", create_num_ok_, expected_num,
+          create_num_ok_ < expected_num ? "NOT PASSED" : "PASSED");
   
   // Kill file systems
   cinqfs.kill_sb(droot->d_sb);

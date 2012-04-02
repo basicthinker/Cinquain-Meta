@@ -41,14 +41,14 @@ struct cinq_fsnode *fsnode_new(const char *name, struct cinq_fsnode *parent) {
   rwlock_init(&fsnode->fs_children_lock);
   
   write_lock(&file_systems.lock);
-  struct cinq_fsnode *dup = find_file_system(&file_systems, name);
+  struct cinq_fsnode *dup = cfs_find(&file_systems, name);
   if (unlikely(dup)) {
     DEBUG_("[Warning@fsnode_new] duplicate names: %s\n", name);
     write_unlock(&file_systems.lock);
     fsnode_mfree(fsnode);
     return NULL;
   }
-  add_file_system(&file_systems, fsnode);
+  cfs_add(&file_systems, fsnode);
   write_unlock(&file_systems.lock);
   
   if (parent) {
@@ -68,7 +68,7 @@ void fsnode_free(struct cinq_fsnode *fsnode) {
   }
   
   write_lock(&file_systems.lock);
-  rm_file_system(&file_systems, fsnode);
+  cfs_rm(&file_systems, fsnode);
   write_unlock(&file_systems.lock);
   
   if (!fsnode_is_root(fsnode) && fsnode->fs_parent) {

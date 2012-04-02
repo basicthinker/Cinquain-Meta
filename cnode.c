@@ -123,8 +123,8 @@ void cnode_free_all(struct cinq_inode *root) {
   cnode_free_(root);
 }
 
-static inline struct cinq_tag *cnode_find_tag_(struct cinq_inode *cnode,
-                                               struct cinq_fsnode *fs) {
+static inline struct cinq_tag *cnode_find_tag_(const struct cinq_inode *cnode,
+                                               const struct cinq_fsnode *fs) {
   struct cinq_tag *tag;
   HASH_FIND_PTR(cnode->ci_tags, &fs, tag);
   return tag;
@@ -183,9 +183,14 @@ static void cnode_tag_parents_(const struct inode *child,
   struct cinq_inode *ci_child = i_cnode(child);
   struct cinq_inode *ci_parent = ci_child->ci_parent;
   while (!cnode_is_root_(ci_child) && ci_parent) {
-    struct inode *parent = cinq_get_inode_(child, child->i_mode);
-    struct cinq_tag *tag = tag_new_(fs, CINQ_MERGE, parent);
     write_lock(&ci_parent->ci_tags_lock);
+    if (cnode_find_tag_(ci_parent, fs)) {
+      write_unlock(&ci_parent->ci_tags_lock);
+      break;
+    }
+    int mode = (child->i_mode | S_IFDIR) & ~S_IFREG;
+    struct inode *parent = cinq_get_inode_(child, mode);
+    struct cinq_tag *tag = tag_new_(fs, CINQ_MERGE, parent);
     cnode_add_tag_(ci_parent, tag);
     write_unlock(&ci_parent->ci_tags_lock);
     
@@ -319,37 +324,27 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
   return err;
 }
 
-// @fsnode: in-out parameter
 static inline struct inode *cinq_lookup_(const struct inode *dir,
-                                         const char *name,
-                                         struct cinq_fsnode **fs_p) {
+                                         const char *name) {
   struct cinq_inode *parent = i_cnode(dir);
-  if (inode_is_root_(dir)) {
-    struct cinq_fsnode *fs;
-    read_lock(&file_systems.lock);
-    HASH_FIND_BY_STR(fs_member, file_systems.fs_table, name, fs);
-    read_unlock(&file_systems.lock);
-    if (!fs) return NULL;
-    *fs_p = fs;
-    return fs->fs_root->d_inode;
-  }
-  
+  struct cinq_fsnode *fs;
+    
   read_lock(&parent->ci_children_lock);
   struct cinq_inode *child = cnode_find_child_(parent, name);
   read_unlock(&parent->ci_children_lock);
   if (!child) {
-    DEBUG_("[Info@cinq_lookup_] no dir or file name is found: %s@%lx\n",
+    DEBUG_("[Info@cinq_lookup_] dir or file is NOT found: %s@%lx\n",
            name, dir->i_ino);
     return NULL;
   }
   
-  struct cinq_fsnode *fs = *fs_p;
+  fs = i_fs(dir);
   read_lock(&child->ci_tags_lock);
   struct cinq_tag *tag = cnode_find_tag_(child, fs);
   while (!tag) {
     if (fsnode_is_root(fs)) {
       DEBUG_("[Info@cinq_lookup_] no file system has that dir or file:"
-             "%s from %lx", name, (*fs_p)->fs_id);
+             "%s from %lx", name, fs->fs_id);
       return NULL;
     }
     fs = fs->fs_parent;
@@ -357,7 +352,6 @@ static inline struct inode *cinq_lookup_(const struct inode *dir,
   }
   read_unlock(&child->ci_tags_lock);
 
-  *fs_p = tag->t_fs;
   return tag->t_inode;
   
   // Since we directly read meta data in memory, there is no iget-like function.
@@ -369,12 +363,22 @@ struct dentry *cinq_lookup(struct inode *dir, struct dentry *dentry,
                            struct nameidata *nameidata) {
   if (dentry->d_name.len >= MAX_NAME_LEN)
     return ERR_PTR(-ENAMETOOLONG);
+  char *name = (char *)dentry->d_name.name;
   
-  struct cinq_fsnode *fs = nameidata ?
-      nameidata->path.dentry->d_fsdata : dentry->d_fsdata;
-  struct inode *inode = cinq_lookup_(dir, (const char *)dentry->d_name.name,
-                                     &fs); // incorporates cinq_iget function
-  dentry->d_fsdata = fs;
+  struct inode *inode;
+  if (inode_is_root_(dir)) {
+    read_lock(&file_systems.lock);
+    struct cinq_fsnode *fs = cfs_find(&file_systems, name);
+    read_unlock(&file_systems.lock);
+    if (!fs) return NULL;
+    inode = fs->fs_root->d_inode;
+    dentry->d_fsdata = fs;
+  } else {
+    inode = cinq_lookup_(dir, name);
+    if (nameidata) { // pass the request ID on
+      dentry->d_fsdata = nameidata->path.dentry->d_fsdata;
+    }
+  }
   if (!inode) {
     return ERR_PTR(-EIO);
   }
