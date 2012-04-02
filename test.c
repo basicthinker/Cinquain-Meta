@@ -157,8 +157,8 @@ static struct dentry *path_lookup_(struct dentry *droot,
                                    const int num) {
   struct dentry *den = droot;           // (1) start from super_block.s_root
   struct inode *inode = den->d_inode;   //     and corresponding inode
-  
-  for (int i = 0; i < num; ++i) {       // (2) for each segment in the path
+  int i;
+  for (i = 0; i < num; ++i) {       // (2) for each segment in the path
     
     // (3) prepare parameters
     struct qstr dname =
@@ -196,7 +196,8 @@ static void *rand_lookup_(void *droot) {
   char dir[k_num_seg][MAX_NAME_LEN + 1];
   int pass;
   int num_ok = 0;
-  for (int i = 0; i < NUM_LOOKUP_; ++i) {
+  int i;
+  for (i = 0; i < NUM_LOOKUP_; ++i) {
     // manually fills dir segments
     // which should be parsed from path in practice
     const int dir_i = rand() % (CNODE_CHILDREN_ + 1);
@@ -265,7 +266,8 @@ static void *rand_create_(void *droot) {
   const int k_num_seg = 4;
   char dir[k_num_seg][MAX_NAME_LEN + 1];
   int num_ok = 0;
-  for (int i = 0; i < NUM_CREATE_; ++i) {
+  int i;
+  for (i = 0; i < NUM_CREATE_; ++i) {
     // manually fills dir segments
     // which should be parsed from path in practice
     const int dir_i = rand() % CNODE_CHILDREN_;
@@ -398,27 +400,27 @@ int main(int argc, const char * argv[]) {
   fprintf(stdout, "\nTest lookup:\n");
   pthread_t lookup_thr[LOOKUP_THR_NUM_];
   memset(lookup_thr, 0, sizeof(lookup_thr));
-  for (int i = 0; i < LOOKUP_THR_NUM_; ++i) {
-    int err = pthread_create(&lookup_thr[i], NULL, rand_lookup_, droot);
+  for (ti = 0; ti < LOOKUP_THR_NUM_; ++ti) {
+    int err = pthread_create(&lookup_thr[ti], NULL, rand_lookup_, droot);
     if (err) {
       DEBUG_("[Error@main] return code from pthread_create() is %d.\n", err);
     }
   }
-  for (int i = 0; i < LOOKUP_THR_NUM_; ++i) {
-    pthread_join(lookup_thr[i], &status);
+  for (ti = 0; ti < LOOKUP_THR_NUM_; ++ti) {
+    pthread_join(lookup_thr[ti], &status);
   }
   
   fprintf(stdout, "\nTest create:\n");
   pthread_t create_thr[CREATE_THR_NUM_];
   memset(create_thr, 0, sizeof(create_thr));
-  for (int i = 0; i < CREATE_THR_NUM_; ++i) {
-    int err = pthread_create(&create_thr[i], NULL, rand_create_, droot);
+  for (ti = 0; ti < CREATE_THR_NUM_; ++ti) {
+    int err = pthread_create(&create_thr[ti], NULL, rand_create_, droot);
     if (err) {
       DEBUG_("[Error@main] return code from pthread_create() is %d.\n", err);
     }
   }
-  for (int i = 0; i < CREATE_THR_NUM_; ++i) {
-    pthread_join(create_thr[i], &status);
+  for (ti = 0; ti < CREATE_THR_NUM_; ++ti) {
+    pthread_join(create_thr[ti], &status);
   }
   
   int expected_num = NUM_LOOKUP_ * LOOKUP_THR_NUM_;
