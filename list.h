@@ -18,6 +18,10 @@
 #define LIST_HEAD(name) \
 	struct list_head name = LIST_HEAD_INIT(name)
 
+struct list_head {
+  struct list_head *next, *prev;
+};
+
 static inline void INIT_LIST_HEAD(struct list_head *list)
 {
 	list->next = list;
@@ -334,7 +338,7 @@ static inline void list_splice_tail_init(struct list_head *list,
  * @member:	the name of the list_struct within the struct.
  */
 #define list_entry(ptr, type, member) \
-	container_of(ptr, type, member)
+	((type *)((char *)(ptr)-(unsigned long)(&((type *)0)->member)))
 
 /**
  * list_first_entry - get the first element from a list

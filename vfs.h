@@ -13,10 +13,11 @@
 #ifndef CINQUAIN_META_VFS_H_
 #define CINQUAIN_META_VFS_H_
 
-// This is a partial header file depending on util.h.
-// util.h should be included instead of this file in most cases.
+#include "util.h"
 
 #ifndef __KERNEL__
+
+#define invalidate_inode_buffers(inode)
 
 // include/linux/fs.h
 /*

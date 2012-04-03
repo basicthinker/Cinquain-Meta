@@ -14,7 +14,7 @@
 
 // This file contains imported functions from Linux VFS.
 
-#include "util.h"
+#include "vfs.h"
 
 // fs/super.c
 /**
@@ -266,128 +266,6 @@ struct inode *new_inode(struct super_block *sb) {
 		// inode_sb_list_add(inode);
 	}
 	return inode;
-}
-
-// fs/fs-writeback.c
-/**
- *	__mark_inode_dirty -	internal function
- *	@inode: inode to mark
- *	@flags: what kind of dirty (i.e. I_DIRTY_SYNC)
- *	Mark an inode as dirty. Callers should use mark_inode_dirty or
- *  	mark_inode_dirty_sync.
- *
- * Put the inode on the super block's dirty list.
- *
- * CAREFUL! We mark it dirty unconditionally, but move it onto the
- * dirty list only if it is hashed or if it refers to a blockdev.
- * If it was not hashed, it will never be added to the dirty list
- * even if it is later hashed, as it will have been marked dirty already.
- *
- * In short, make sure you hash any inodes _before_ you start marking
- * them dirty.
- *
- * This function *must* be atomic for the I_DIRTY_PAGES case -
- * set_page_dirty() is called under spinlock in several places.
- *
- * Note that for blockdevs, inode->dirtied_when represents the dirtying time of
- * the block-special inode (/dev/hda1) itself.  And the ->dirtied_when field of
- * the kernel-internal blockdev inode represents the dirtying time of the
- * blockdev's pages.  This is why for I_DIRTY_PAGES we always use
- * page->mapping->host, so the page-dirtying time is recorded in the internal
- * blockdev inode.
- */
-static inline void mark_inode_dirty_(struct inode *inode, int flags)
-{
-	struct super_block *sb = inode->i_sb;
-  //	struct backing_dev_info *bdi = NULL;
-  
-	/*
-	 * Don't do this for I_DIRTY_PAGES - that doesn't actually
-	 * dirty the inode itself
-	 */
-	if (flags & (I_DIRTY_SYNC | I_DIRTY_DATASYNC)) {
-		if (sb->s_op->dirty_inode)
-			sb->s_op->dirty_inode(inode);
-	}
-  
-  return; // truncate the following
-          //	/*
-          //	 * make sure that changes are seen by all cpus before we test i_state
-          //	 * -- mikulas
-          //	 */
-          //	smp_mb();
-          //  
-          //	/* avoid the locking if we can */
-          //	if ((inode->i_state & flags) == flags)
-          //		return;
-          //  
-          //	if (unlikely(block_dump))
-          //		block_dump___mark_inode_dirty(inode);
-          //  
-          //	spin_lock(&inode->i_lock);
-          //	if ((inode->i_state & flags) != flags) {
-          //		const int was_dirty = inode->i_state & I_DIRTY;
-          //    
-          //		inode->i_state |= flags;
-          //    
-          //		/*
-          //		 * If the inode is being synced, just update its dirty state.
-          //		 * The unlocker will place the inode on the appropriate
-          //		 * superblock list, based upon its state.
-          //		 */
-          //		if (inode->i_state & I_SYNC)
-          //			goto out_unlock_inode;
-          //    
-          //		/*
-          //		 * Only add valid (hashed) inodes to the superblock's
-          //		 * dirty list.  Add blockdev inodes as well.
-          //		 */
-          //		if (!S_ISBLK(inode->i_mode)) {
-          //			if (inode_unhashed(inode))
-          //				goto out_unlock_inode;
-          //		}
-          //		if (inode->i_state & I_FREEING)
-          //			goto out_unlock_inode;
-          //    
-          //		/*
-          //		 * If the inode was already on b_dirty/b_io/b_more_io, don't
-          //		 * reposition it (that would break b_dirty time-ordering).
-          //		 */
-          //		if (!was_dirty) {
-          //			bool wakeup_bdi = false;
-          //			bdi = inode_to_bdi(inode);
-          //      
-          //			if (bdi_cap_writeback_dirty(bdi)) {
-          //				WARN(!test_bit(BDI_registered, &bdi->state),
-          //				     "bdi-%s not registered\n", bdi->name);
-          //        
-          //				/*
-          //				 * If this is the first dirty inode for this
-          //				 * bdi, we have to wake-up the corresponding
-          //				 * bdi thread to make sure background
-          //				 * write-back happens later.
-          //				 */
-          //				if (!wb_has_dirty_io(&bdi->wb))
-          //					wakeup_bdi = true;
-          //			}
-          //      
-          //			spin_unlock(&inode->i_lock);
-          //			spin_lock(&inode_wb_list_lock);
-          //			inode->dirtied_when = jiffies;
-          //			list_move(&inode->i_wb_list, &bdi->wb.b_dirty);
-          //			spin_unlock(&inode_wb_list_lock);
-          //      
-          //			if (wakeup_bdi)
-          //				bdi_wakeup_thread_delayed(bdi);
-          //			return;
-          //		}
-          //	}
-          //out_unlock_inode:
-          //	spin_unlock(&inode->i_lock);
-}
-
-void mark_inode_dirty(struct inode *inode) {
-  mark_inode_dirty_(inode, I_DIRTY);
 }
 
 #endif // __KERNEL__

@@ -25,7 +25,7 @@ static inline int fsnode_ancestor_(struct cinq_fsnode *ancestor,
 
 struct cinq_fsnode *fsnode_new(const char *name, struct cinq_fsnode *parent) {
   
-  struct cinq_fsnode *fsnode = fsnode_malloc();
+  struct cinq_fsnode *fsnode = fsnode_malloc_();
   fsnode->fs_id = (unsigned long)fsnode;
   DEBUG_ON_((void *)fsnode->fs_id != fsnode,
            "[Error@cnode_new] conversion fails: fs_id %lx != fsnode %p",
@@ -45,7 +45,7 @@ struct cinq_fsnode *fsnode_new(const char *name, struct cinq_fsnode *parent) {
   if (unlikely(dup)) {
     DEBUG_("[Warning@fsnode_new] duplicate names: %s\n", name);
     write_unlock(&file_systems.lock);
-    fsnode_mfree(fsnode);
+    fsnode_free(fsnode);
     return NULL;
   }
   cfs_add(&file_systems, fsnode);
@@ -76,7 +76,7 @@ void fsnode_free(struct cinq_fsnode *fsnode) {
     HASH_DELETE(fs_child, fsnode->fs_parent->fs_children, fsnode);
     write_unlock(&fsnode->fs_parent->fs_children_lock);
   }
-  fsnode_mfree(fsnode);
+  fsnode_free(fsnode);
 }
 
 void fsnode_free_all(struct cinq_fsnode *fsnode) {

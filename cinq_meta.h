@@ -13,7 +13,8 @@
 #ifndef CINQUAIN_META_CINQ_META_H_
 #define CINQUAIN_META_CINQ_META_H_
 
-#include "util.h"
+#include "log.h"
+#include "vfs.h"
 
 /* Cinquain File System Data Structures and Operations */
 
@@ -142,6 +143,7 @@ extern void cinq_dirty_inode(struct inode *inode);
 
 extern int cinq_write_inode(struct inode *inode, struct writeback_control *wbc);
 
+extern void cinq_evict_inode(struct inode *inode);
 
 /* cnode.c */
 
@@ -199,6 +201,9 @@ extern ssize_t cinq_write(struct file *filp, const char *buf, size_t len,
                           loff_t *ppos);
 extern int cinq_release_file (struct inode * inode, struct file * filp);
 
+struct cinq_fsnode fsnode_log;
+struct cinq_log cnode_log;
+struct cinq_log inode_log;
 
 /* cinq_meta.c */
 extern struct cinq_file_systems file_systems;

@@ -24,7 +24,7 @@ static inline int cnode_is_root_(const struct cinq_inode *cnode) {
 static inline struct cinq_tag *tag_new_(const struct cinq_fsnode *fs,
                                         enum cinq_inherit_type mode,
                                         struct inode *inode) {
-  struct cinq_tag *tag = tag_malloc();
+  struct cinq_tag *tag = tag_malloc_();
   if (unlikely(!tag)) {
     return NULL;
   }
@@ -37,22 +37,25 @@ static inline struct cinq_tag *tag_new_(const struct cinq_fsnode *fs,
   return tag;
 }
 
-// Retrieves the super_operations corresponding to the tag
-static inline const struct super_operations *s_op_(struct cinq_tag *tag) {
-  return tag->t_inode->i_sb->s_op;
-}
-
-static inline void tag_free_(struct cinq_tag *tag) {
+static inline void tag_evict_(struct cinq_tag *tag) {
   destroy_inode(tag->t_inode);
   write_lock(&tag->t_host->ci_tags_lock);
   HASH_DEL(tag->t_host->ci_tags, tag);
   write_unlock(&tag->t_host->ci_tags_lock);
-  tag_mfree(tag);
+  tag_free_(tag);
+}
+
+static inline void tag_drop_inode_(struct cinq_tag *tag) {
+  tag->t_inode = NULL;
+}
+
+static inline int tag_valid_(struct cinq_tag *tag) {
+  return tag->t_inode != NULL;
 }
 
 static struct cinq_inode *cnode_new_(char *name) {
   
-  struct cinq_inode *cnode = cnode_malloc();
+  struct cinq_inode *cnode = cnode_malloc_();
   if (unlikely(!cnode)) {
     DEBUG_("[Error@cnode_new] allocation fails: %s.\n", name);
     return NULL;
@@ -86,7 +89,7 @@ static inline void cnode_rm_child_(struct cinq_inode *parent, struct cinq_inode*
   child->ci_parent = NULL;
 }
 
-static void cnode_free_(struct cinq_inode *cnode) {
+static void cnode_evict_(struct cinq_inode *cnode) {
   if (cnode->ci_tags || cnode->ci_children) {
     DEBUG_("[Error@cnode_free] failed to delete cnode %lx "
            "who still has tags or children.\n", cnode->ci_id);
@@ -98,7 +101,7 @@ static void cnode_free_(struct cinq_inode *cnode) {
     cnode_rm_child_(parent, cnode);
     write_unlock(&parent->ci_children_lock);
   }
-  cnode_mfree(cnode);
+  cnode_free_(cnode);
 }
 
 // This function is NOT thread safe, since it is used in the end,

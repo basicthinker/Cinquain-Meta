@@ -7,7 +7,7 @@
 //  file.c
 //  cinquain-meta
 //
-//  Created by Jinglei Ren on 3/20/12.
+//  Created by Jinglei Ren <jinglei.ren@gmail.com> on 3/20/12.
 //
 
 #include "cinq_meta.h"

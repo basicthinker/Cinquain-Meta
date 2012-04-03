@@ -28,7 +28,8 @@ const struct file_system_type cinqfs = {
 
 const struct super_operations cinq_super_operations = {
   .dirty_inode = cinq_dirty_inode,
-  .write_inode = cinq_write_inode
+  .write_inode = cinq_write_inode,
+  .evict_inode = cinq_evict_inode
 };
 
 const struct inode_operations cinq_dir_inode_operations = {

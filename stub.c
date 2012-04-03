@@ -10,7 +10,7 @@
 //  Created by Jinglei Ren <jinglei.ren@gmail.com> on 3/11/12.
 //
 
-#include "util.h"
+#include "vfs.h"
 
 // Supplement of kernel functions to user space.
 // Subject to user-space adjustment.

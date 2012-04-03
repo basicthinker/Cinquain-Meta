@@ -1,9 +1,13 @@
+/*
+ * Copyright (c) 2012 Jinglei Ren <jinglei.ren@stanzax.org>
+ * All rights reserved.
+ */
+
 //
 //  super.c
 //  cinquain-meta
 //
-//  Created by Jinglei Ren on 3/22/12.
-//  Copyright (c) 2012 Tsinghua University. All rights reserved.
+//  Created by Jinglei Ren <jinglei.ren@gmail.com> on 3/22/12.
 //
 
 #include "cinq_meta.h"
@@ -58,4 +62,11 @@ void cinq_dirty_inode(struct inode *inode) {
 
 int cinq_write_inode(struct inode *inode, struct writeback_control *wbc) {
   return 0;
+}
+
+void cinq_evict_inode(struct inode *inode) {
+  if (!inode->i_nlink) { // && !is_bad_inode(inode)
+    invalidate_inode_buffers(inode);
+    struct cinq_inode *cnode = i_cnode(inode);
+  }
 }

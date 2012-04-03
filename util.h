@@ -15,11 +15,15 @@
 
 /* All kernel portability issues are addressed in this header. */
 
-#ifdef __KERNEL__ // intended for Linux
-/* Kernel (exchangable) */
+#ifdef __KERNEL__
+
+#include <linux/list.h>
+#include <linux/kthread.h>
+#include <linux/delay.h>
 
 #else
-/* User space (exchangable) */
+
+#include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <inttypes.h>
@@ -28,6 +32,19 @@
 #include <pthread.h>
 #include <time.h>
 #include "atomic.h"
+#include "list.h"
+
+#endif
+
+#ifdef __KERNEL__ // intended for Linux
+/* Kernel (exchangable) */
+
+#define THREAD_FUNC_(name) \
+    static int name
+#define THREAD_RETURN_ return 0
+
+#else
+/* User space (exchangable) */
 
 // include/linux/pagemap.h
 #define PAGE_CACHE_SHIFT        13 // 8KB
@@ -43,19 +60,31 @@
 #define DEBUG_(...)
 #endif // CINQ_DEBUG
 
-#define fsnode_malloc() \
+#define fsnode_malloc_() \
     ((struct cinq_fsnode *)malloc(sizeof(struct cinq_fsnode)))
-#define fsnode_mfree(p) (free(p))
+#define fsnode_free_(p) (free(p))
 
-#define tag_malloc() \
+#define tag_malloc_() \
     ((struct cinq_tag *)malloc(sizeof(struct cinq_tag)))
-#define tag_mfree(p) (free(p))
+#define tag_free_(p) (free(p))
 
-#define cnode_malloc() \
+#define cnode_malloc_() \
     ((struct cinq_inode *)malloc(sizeof(struct cinq_inode)))
-#define cnode_mfree(p) (free(p))
+#define cnode_free_(p) (free(p))
+
+#define log_malloc_() \
+    ((struct cinq_log *)malloc(sizeof(struct cinq_log)))
+#define log_free_(p) (free(p))
+
+#define log_entry_malloc_() \
+    ((struct log_entry *)malloc(sizeof(struct log_entry)))
+#define log_entry_free_(p) (free(p))
 
 #define CURRENT_TIME ((struct timespec) { time(NULL), 0 })
+
+#define THREAD_FUNC_(name) \
+    static void *name
+#define THREAD_RETURN_ pthread_exit(NULL)
 
 #endif // __KERNEL__
 
@@ -86,15 +115,11 @@ typedef pthread_rwlock_t rwlock_t;
 #define write_unlock(lock_p) (pthread_rwlock_unlock(lock_p))
 
 typedef pthread_mutex_t spinlock_t;
+#define SPIN_LOCK_UNLOCKED PTHREAD_MUTEX_INITIALIZER
 #define spin_lock_init(lock_p) (pthread_mutex_init(lock_p, NULL))
 // #define spin_lock_destroy(lock_p) (pthread_mutex_destroy(lock_p))
 #define spin_lock(lock_p) (pthread_mutex_lock(lock_p))
 #define spin_unlock(lock_p) (pthread_mutex_unlock(lock_p))
-
-struct list_head {
-  struct list_head *next, *prev;
-};
-#include "list.h"
 
 #define unlikely(cond) (cond)
 
@@ -173,6 +198,11 @@ static inline long PTR_ERR(const void *ptr) { // include/linux/err.h
 #define S_ISFIFO(m)     (((m) & S_IFMT) == S_IFIFO)
 #define S_ISSOCK(m)     (((m) & S_IFMT) == S_IFSOCK)
 
+// linux/sched.h
+#define TASK_RUNNING            0
+#define TASK_INTERRUPTIBLE      1
+#define TASK_UNINTERRUPTIBLE    2
+
 // linux/fs.h: the fs-independent mount-flags
 #define MS_ACTIVE       (1<<30)
 
@@ -180,7 +210,8 @@ static inline long PTR_ERR(const void *ptr) { // include/linux/err.h
 
 #define MAX_NESTED_LINKS 6
 
-#include "vfs.h"
+#define set_current_state(state)
+#define msleep(msec) sleep(msec / 1000)
 
 #endif // __KERNEL__
 
