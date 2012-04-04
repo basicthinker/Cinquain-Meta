@@ -18,8 +18,6 @@
 #ifdef __KERNEL__
 
 #include <linux/list.h>
-#include <linux/kthread.h>
-#include <linux/delay.h>
 
 #else
 
@@ -39,9 +37,6 @@
 #ifdef __KERNEL__ // intended for Linux
 /* Kernel (exchangable) */
 
-#define THREAD_FUNC_(name) \
-    static int name
-#define THREAD_RETURN_ return 0
 
 #else
 /* User space (exchangable) */
@@ -72,19 +67,15 @@
     ((struct cinq_inode *)malloc(sizeof(struct cinq_inode)))
 #define cnode_free_(p) (free(p))
 
-#define log_malloc_() \
-    ((struct cinq_log *)malloc(sizeof(struct cinq_log)))
-#define log_free_(p) (free(p))
+#define journal_malloc_() \
+    ((struct cinq_journal *)malloc(sizeof(struct cinq_journal)))
+#define journal_free_(p) (free(p))
 
-#define log_entry_malloc_() \
-    ((struct log_entry *)malloc(sizeof(struct log_entry)))
-#define log_entry_free_(p) (free(p))
+#define journal_entry_malloc_() \
+    ((struct journal_entry *)malloc(sizeof(struct journal_entry)))
+#define journal_entry_free_(p) (free(p))
 
 #define CURRENT_TIME ((struct timespec) { time(NULL), 0 })
-
-#define THREAD_FUNC_(name) \
-    static void *name
-#define THREAD_RETURN_ pthread_exit(NULL)
 
 #endif // __KERNEL__
 
@@ -209,9 +200,6 @@ static inline long PTR_ERR(const void *ptr) { // include/linux/err.h
 #define MAX_LFS_FILESIZE 0x7fffffffffffffffUL
 
 #define MAX_NESTED_LINKS 6
-
-#define set_current_state(state)
-#define msleep(msec) sleep(msec / 1000)
 
 #endif // __KERNEL__
 

@@ -37,7 +37,7 @@ static inline struct cinq_tag *tag_new_(const struct cinq_fsnode *fs,
   return tag;
 }
 
-static inline void tag_evict_(struct cinq_tag *tag) {
+static inline void tag_evict(struct cinq_tag *tag) {
   destroy_inode(tag->t_inode);
   write_lock(&tag->t_host->ci_tags_lock);
   HASH_DEL(tag->t_host->ci_tags, tag);
@@ -69,6 +69,7 @@ static struct cinq_inode *cnode_new_(char *name) {
   rwlock_init(&cnode->ci_tags_lock);
   rwlock_init(&cnode->ci_children_lock);
   cnode->ci_parent = NULL;
+  
   return cnode;
 }
 
@@ -89,9 +90,9 @@ static inline void cnode_rm_child_(struct cinq_inode *parent, struct cinq_inode*
   child->ci_parent = NULL;
 }
 
-static void cnode_evict_(struct cinq_inode *cnode) {
+static void cnode_evict(struct cinq_inode *cnode) {
   if (cnode->ci_tags || cnode->ci_children) {
-    DEBUG_("[Error@cnode_free] failed to delete cnode %lx "
+    DEBUG_("[Error@cnode_evict] failed to delete cnode %lx "
            "who still has tags or children.\n", cnode->ci_id);
     return;
   }
@@ -106,24 +107,24 @@ static void cnode_evict_(struct cinq_inode *cnode) {
 
 // This function is NOT thread safe, since it is used in the end,
 // and a single thread is proper then.
-void cnode_free_all(struct cinq_inode *root) {
+void cnode_evict_all(struct cinq_inode *root) {
   if (root->ci_children) {
     struct cinq_inode *cur, *tmp;
     HASH_ITER(ci_child, root->ci_children, cur, tmp) {
-      cnode_free_all(cur);
+      cnode_evict_all(cur);
     }
     DEBUG_ON_(root->ci_children != NULL,
-              "[Error@cnode_free_all] not empty children: %lx\n", root->ci_id);
+              "[Error@cnode_evict_all] not empty children: %lx\n", root->ci_id);
   }
   if (root->ci_tags) {
     struct cinq_tag *cur, *tmp;
     HASH_ITER(hh, root->ci_tags, cur, tmp) {
-      tag_free_(cur);
+      tag_evict(cur);
     }
     DEBUG_ON_(root->ci_tags != NULL,
-              "[Error@cnode_free_all] not empty tags: %lx\n", root->ci_id);
+              "[Error@cnode_evict_all] not empty tags: %lx\n", root->ci_id);
   }
-  cnode_free_(root);
+  cnode_evict(root);
 }
 
 static inline struct cinq_tag *cnode_find_tag_(const struct cinq_inode *cnode,
@@ -175,7 +176,6 @@ static struct inode *cinq_get_inode_(const struct inode *dir, int mode) {
                dir->i_ino);
         break;
     }
-    mark_inode_dirty(inode);
   }
   return inode;
 }
@@ -196,6 +196,8 @@ static void cnode_tag_parents_(const struct inode *child,
     struct cinq_tag *tag = tag_new_(fs, CINQ_MERGE, parent);
     cnode_add_tag_(ci_parent, tag);
     write_unlock(&ci_parent->ci_tags_lock);
+    
+    journal_cnode(ci_parent, UPDATE);
     
     ci_child = ci_parent;
     ci_parent = ci_child->ci_parent;
@@ -257,6 +259,7 @@ static int cinq_mknod(struct inode *dir, struct dentry *dentry, int mode) {
     }
     write_unlock(&child->ci_tags_lock);
     
+    journal_cnode(child, UPDATE);
   } else {
     child = cnode_new_(name);
     struct inode *inode = cinq_get_inode_(dir, mode);
@@ -269,12 +272,16 @@ static int cinq_mknod(struct inode *dir, struct dentry *dentry, int mode) {
     cnode_add_tag_(child, tag);
     cnode_add_child_(parent, child);
     write_unlock(&parent->ci_children_lock);
+    
+    journal_inode(inode, CREATE);
+    journal_cnode(child, CREATE);
+    journal_cnode(parent, UPDATE);
   }
   
-  mark_inode_dirty(tag->t_inode);
   d_instantiate(dentry, tag->t_inode);
   dget(dentry);
   dir->i_mtime = dir->i_ctime = CURRENT_TIME;
+  journal_inode(dir, UPDATE);
   
   if (i_tag(dir)->t_fs != fs) {
     cnode_tag_parents_(tag->t_inode, fs);
@@ -312,18 +319,21 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
     cnode_add_tag_(parent, tag);
     write_unlock(&parent->ci_tags_lock);
     
-    mark_inode_dirty(fs_inode);
     d_instantiate(dentry, fs_inode);
     dget(dentry);
     dir->i_mtime = dir->i_ctime = CURRENT_TIME;
     
+    journal_inode(fs_inode, CREATE);
+    journal_cnode(parent, UPDATE);
+    journal_inode(dir, UPDATE);
     return 0;
   }
 
   int err = cinq_mknod(dir, dentry, mode | S_IFDIR);
   if (!err) {
-     inode_inc_link_count(dir);
+     inc_nlink(dir);
   }
+  journal_inode(dir, UPDATE);
   return err;
 }
 

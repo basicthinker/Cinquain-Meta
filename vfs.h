@@ -519,17 +519,10 @@ extern struct dentry *mount_nodev(struct file_system_type *fs_type,
  */
 extern struct inode *new_inode(struct super_block *sb);
 
-extern void mark_inode_dirty(struct inode *inode);
-
 
 // include/linux/fs.h
 static inline void inc_nlink(struct inode *inode) {
   inode->i_nlink++;
-}
-
-static inline void inode_inc_link_count(struct inode *inode) {
-  inc_nlink(inode);
-  mark_inode_dirty(inode);
 }
 
 /**

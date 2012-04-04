@@ -13,8 +13,9 @@
 #ifndef CINQUAIN_META_CINQ_META_H_
 #define CINQUAIN_META_CINQ_META_H_
 
-#include "log.h"
+#include "journal.h"
 #include "vfs.h"
+#include "thread.h"
 
 /* Cinquain File System Data Structures and Operations */
 
@@ -44,10 +45,10 @@ extern struct cinq_fsnode *fsnode_new(const char *name,
                                       struct cinq_fsnode *parent);
 
 // Destroys a single fsnode without children
-extern void fsnode_free(struct cinq_fsnode *fsnode);
+extern void fsnode_evict(struct cinq_fsnode *fsnode);
 
 // Destroys recursively a single fsnode and all its descendants
-extern void fsnode_free_all(struct cinq_fsnode *fsnode);
+extern void fsnode_evict_all(struct cinq_fsnode *fsnode);
 
 extern void fsnode_move(struct cinq_fsnode *child,
                         struct cinq_fsnode *new_parent);
@@ -145,6 +146,19 @@ extern int cinq_write_inode(struct inode *inode, struct writeback_control *wbc);
 
 extern void cinq_evict_inode(struct inode *inode);
 
+extern struct cinq_journal cinq_journal;
+
+extern struct thread_task journal_thread;
+
+extern THREAD_FUNC_(journal_writeback)(void *data);
+
+extern void journal_fsnode(struct cinq_fsnode *fsnode,
+                           enum journal_action action);
+extern void journal_cnode(struct cinq_inode *cnode,
+                          enum journal_action action);
+extern void journal_inode(struct inode *inode, enum journal_action action);
+
+
 /* cnode.c */
 
 // @dentry: a negative dentry, namely whose d_inode is null.
@@ -189,7 +203,7 @@ extern int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode);
 // helper functions
 extern struct inode *cnode_make_tree(struct super_block *sb);
 
-extern void cnode_free_all(struct cinq_inode *root);
+extern void cnode_evict_all(struct cinq_inode *root);
 
 
 /* file.c */
@@ -201,9 +215,6 @@ extern ssize_t cinq_write(struct file *filp, const char *buf, size_t len,
                           loff_t *ppos);
 extern int cinq_release_file (struct inode * inode, struct file * filp);
 
-struct cinq_fsnode fsnode_log;
-struct cinq_log cnode_log;
-struct cinq_log inode_log;
 
 /* cinq_meta.c */
 extern struct cinq_file_systems file_systems;

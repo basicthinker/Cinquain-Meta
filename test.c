@@ -386,9 +386,7 @@ int main(int argc, const char * argv[]) {
   int ti = 0;
   for (fs = file_systems.fs_table; fs != NULL; fs = fs->fs_member.next) {
     int err = pthread_create(&mkdir_t[ti], NULL, make_dir_tree, fs);
-    if (err) {
-      DEBUG_("[Error@main] return code from pthread_create() is %d.\n", err);
-    }
+    DEBUG_ON_(err, "[Error@main] error code of pthread_create: %d.\n", err);
   }
   fprintf(stdout, "\nWith three-layer dir tree:\n");
   void *status;
@@ -402,9 +400,7 @@ int main(int argc, const char * argv[]) {
   memset(lookup_thr, 0, sizeof(lookup_thr));
   for (ti = 0; ti < LOOKUP_THR_NUM_; ++ti) {
     int err = pthread_create(&lookup_thr[ti], NULL, rand_lookup_, droot);
-    if (err) {
-      DEBUG_("[Error@main] return code from pthread_create() is %d.\n", err);
-    }
+    DEBUG_ON_(err, "[Error@main] error code of pthread_create: %d.\n", err);
   }
   for (ti = 0; ti < LOOKUP_THR_NUM_; ++ti) {
     pthread_join(lookup_thr[ti], &status);
@@ -415,9 +411,7 @@ int main(int argc, const char * argv[]) {
   memset(create_thr, 0, sizeof(create_thr));
   for (ti = 0; ti < CREATE_THR_NUM_; ++ti) {
     int err = pthread_create(&create_thr[ti], NULL, rand_create_, droot);
-    if (err) {
-      DEBUG_("[Error@main] return code from pthread_create() is %d.\n", err);
-    }
+    DEBUG_ON_(err, "[Error@main] error code of pthread_create: %d.\n", err);
   }
   for (ti = 0; ti < CREATE_THR_NUM_; ++ti) {
     pthread_join(create_thr[ti], &status);
@@ -433,7 +427,7 @@ int main(int argc, const char * argv[]) {
   
   // Kill file systems
   cinqfs.kill_sb(droot->d_sb);
-  fsnode_free_all(fsroot);
+  fsnode_evict_all(fsroot);
   
   return 0;
 }

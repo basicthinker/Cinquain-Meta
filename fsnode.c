@@ -45,7 +45,7 @@ struct cinq_fsnode *fsnode_new(const char *name, struct cinq_fsnode *parent) {
   if (unlikely(dup)) {
     DEBUG_("[Warning@fsnode_new] duplicate names: %s\n", name);
     write_unlock(&file_systems.lock);
-    fsnode_free(fsnode);
+    fsnode_free_(fsnode);
     return NULL;
   }
   cfs_add(&file_systems, fsnode);
@@ -59,10 +59,10 @@ struct cinq_fsnode *fsnode_new(const char *name, struct cinq_fsnode *parent) {
   return fsnode;
 }
 
-void fsnode_free(struct cinq_fsnode *fsnode) {
+void fsnode_evict(struct cinq_fsnode *fsnode) {
   d_genocide(fsnode->fs_root);
   if (fsnode->fs_children) {
-    DEBUG_("[Warning@fsnode_free] failed to delete fsnode %lx(%s) "
+    DEBUG_("[Warning@fsnode_evict] failed to delete fsnode %lx(%s) "
            "who still has children.\n", fsnode->fs_id, fsnode->fs_name);
     return;
   }
@@ -76,17 +76,17 @@ void fsnode_free(struct cinq_fsnode *fsnode) {
     HASH_DELETE(fs_child, fsnode->fs_parent->fs_children, fsnode);
     write_unlock(&fsnode->fs_parent->fs_children_lock);
   }
-  fsnode_free(fsnode);
+  fsnode_free_(fsnode);
 }
 
-void fsnode_free_all(struct cinq_fsnode *fsnode) {
+void fsnode_evict_all(struct cinq_fsnode *fsnode) {
   if (fsnode->fs_children) {
     struct cinq_fsnode *cur, *tmp;
     HASH_ITER(fs_child, fsnode->fs_children, cur, tmp) {
-      fsnode_free_all(cur);
+      fsnode_evict_all(cur);
     }
   }
-  fsnode_free(fsnode);
+  fsnode_evict(fsnode);
 }
 
 void fsnode_move(struct cinq_fsnode *child,
@@ -115,5 +115,5 @@ void fsnode_bridge(struct cinq_fsnode *out) {
   if (out->fs_children) {
     fsnode_move(out->fs_children, out->fs_parent);
   }
-  fsnode_free(out);
+  fsnode_evict(out);
 }

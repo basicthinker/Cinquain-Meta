@@ -12,6 +12,10 @@
 
 #include "cinq_meta.h"
 
+struct thread_task journal_thread;
+
+struct cinq_journal cinq_journal;
+
 // @data: can be NULL
 static int cinq_fill_super_(struct super_block *sb, void *data, int silent) {
   struct inode *inode = NULL;
@@ -37,7 +41,7 @@ static int cinq_fill_super_(struct super_block *sb, void *data, int silent) {
 	root = d_alloc_root(inode);
   sb->s_root = root;
   if (!root) {
-    cnode_free_all(i_cnode(inode));
+    cnode_evict_all(i_cnode(inode));
     return -ENOMEM;
 	}
   return 0;
@@ -45,28 +49,79 @@ static int cinq_fill_super_(struct super_block *sb, void *data, int silent) {
 
 struct dentry *cinq_mount (struct file_system_type *fs_type, int flags,
                            const char *dev_name, void *data) {
+  journal_init(&cinq_journal, "Cinquain");
+//  thread_init(&journal_thread, journal_writeback, &cinq_journal,
+//              "cinquain-journal");
+//  thread_run(&journal_thread);
   return mount_nodev(fs_type, flags, data, cinq_fill_super_);
 }
 
 void cinq_kill_sb (struct super_block *sb) {
   if (sb->s_root) {
-    cnode_free_all(i_cnode(sb->s_root->d_inode));
+//    while (!journal_empty(&cinq_journal)) {
+//      sleep(1);
+//    }
+//    thread_stop(&journal_thread);
+    cnode_evict_all(i_cnode(sb->s_root->d_inode));
     d_genocide(sb->s_root);
   }
   DEBUG_ON_(!sb->s_root, "[Warning@cinq_kill_sb]: invoked on null dentry.\n");
 }
 
-void cinq_dirty_inode(struct inode *inode) {
-  
-}
-
-int cinq_write_inode(struct inode *inode, struct writeback_control *wbc) {
-  return 0;
-}
-
 void cinq_evict_inode(struct inode *inode) {
   if (!inode->i_nlink) { // && !is_bad_inode(inode)
     invalidate_inode_buffers(inode);
-    struct cinq_inode *cnode = i_cnode(inode);
   }
+}
+
+
+THREAD_FUNC_(journal_writeback)(void *data) {
+  struct cinq_journal *journal = data;
+  struct journal_entry *entry;
+  
+  while (!thread_should_stop()) {
+    set_current_state(TASK_RUNNING);
+    
+    while (!journal_empty(journal)) {
+      entry = journal_get_syn(journal);
+      int key_size = sizeof(entry->key);
+      char key_str[key_size + 1];
+      strncpy(key_str, entry->key, key_size);
+      key_str[key_size] = '\0';
+      switch (entry->action) {
+        case CREATE:
+          fprintf(stdout, "journal - CREATE key '%s'.\n", key_str);
+          break;
+        case UPDATE:
+          fprintf(stdout, "journal - UPDATE key '%s'.\n", key_str);
+          break;
+        case DELETE:
+          fprintf(stdout, "journal - UPDATE key '%s'.\n", key_str);
+          break;
+        default:
+          DEBUG_("[Error@journal_writeback] journal entry action is NOT valid: %d.\n",
+                 entry->action);
+      }
+    }
+    
+    set_current_state(TASK_INTERRUPTIBLE);
+    msleep(1000);
+  }
+  THREAD_RETURN_;
+}
+
+void journal_fsnode(struct cinq_fsnode *fsnode, enum journal_action action) {
+  struct journal_entry *entry = journal_entry_new(&fsnode->fs_id,
+                                                  fsnode, action);
+  journal_add_syn(&cinq_journal, entry);
+}
+
+void journal_cnode(struct cinq_inode *cnode, enum journal_action action) {
+  struct journal_entry *entry = journal_entry_new(&cnode->ci_id, cnode, action);
+  journal_add_syn(&cinq_journal, entry);
+}
+
+void journal_inode(struct inode *inode, enum journal_action action) {
+  struct journal_entry *entry = journal_entry_new(&inode->i_ino, inode, action);
+  journal_add_syn(&cinq_journal, entry);
 }
