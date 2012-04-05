@@ -15,6 +15,8 @@
 // Supplement of kernel functions to user space.
 // Subject to user-space adjustment.
 
+// ALL comments and implementation are borrowed from linux source.
+
 /**
  * d_alloc	-	allocate a dcache entry
  * @parent: parent of entry to allocate
@@ -97,6 +99,78 @@ struct dentry *dget(struct dentry *dentry) {
     spin_unlock(&dentry->d_lock);
   }
   return dentry;
+}
+
+// NOTE that comments below the following specifications are just for reference.
+// User space implementation can choose different model that meets the
+// Requirements of this function:
+// (1) deal with dentry cache
+// (2) deal with dentry deallocation
+// (3) deal with corresponding inode when its count is zero
+//     and it should be evicted (see inode_operations).
+/* 
+ * This is dput
+ *
+ * This is complicated by the fact that we do not want to put
+ * dentries that are no longer on any hash chain on the unused
+ * list: we'd much rather just get rid of them immediately.
+ *
+ * However, that implies that we have to traverse the dentry
+ * tree upwards to the parents which might _also_ now be
+ * scheduled for deletion (it may have been only waiting for
+ * its last child to go away).
+ *
+ * This tail recursion is done by hand as we don't want to depend
+ * on the compiler to always get this right (gcc generally doesn't).
+ * Real recursion would eat up our stack space.
+ *
+ * dput - release a dentry
+ * @dentry: dentry to release 
+ *
+ * Release a dentry. This will drop the usage count and if appropriate
+ * call the dentry unlink method as well as removing it from the queues and
+ * releasing its resources. If the parent dentries were scheduled for release
+ * they too may now get deleted.
+ */
+void dput(struct dentry *dentry) {
+	if (!dentry)
+		return;
+  
+repeat:
+//	if (dentry->d_count == 1)
+//		might_sleep();
+	spin_lock(&dentry->d_lock);
+	DEBUG_ON_(!dentry->d_count,
+            "[Error@dput] dentry count already reaches zero.\n");
+	if (dentry->d_count > 1) {
+		dentry->d_count--;
+		spin_unlock(&dentry->d_lock);
+		return;
+	}
+  
+//	if (dentry->d_flags & DCACHE_OP_DELETE) {
+//		if (dentry->d_op->d_delete(dentry))
+//			goto kill_it;
+//	}
+  
+//	/* Unreachable? Get rid of it */
+// 	if (d_unhashed(dentry))
+		goto kill_it;
+//  
+//	/* Otherwise leave it cached and ensure it's on the LRU */
+//	dentry->d_flags |= DCACHE_REFERENCED;
+//	dentry_lru_add(dentry);
+  
+	dentry->d_count--;
+	spin_unlock(&dentry->d_lock);
+	return;
+  
+kill_it:
+  dentry = NULL; // dentry_kill(dentry, 1); // refers to linux source fs/dcache.c
+  // Here iput() should be finally invoked.
+  // Refer to linux source dentry_iput(struct dentry * dentry)
+	if (dentry)
+		goto repeat;
 }
 
 
@@ -188,52 +262,6 @@ struct dentry *d_splice_alias(struct inode *inode,
   // d_rehash(entry); // requires user-space implementation
 	return NULL;
 }
-
-/**
- * d_invalidate - invalidate a dentry
- * @dentry: dentry to invalidate
- *
- * Try to invalidate the dentry if it turns out to be
- * possible. If there are other dentries that can be
- * reached through this one we can't delete it and we
- * return -EBUSY. On success we return 0.
- *
- * no dcache lock.
- */
-// All children should be invalidated.
-int d_invalidate(struct dentry * dentry) {
-  //	/*
-  //	 * Check whether to do a partial shrink_dcache
-  //	 * to get rid of unused child entries.
-  //	 */
-  //	if (!list_empty(&dentry->d_subdirs)) {
-  //		spin_unlock(&dentry->d_lock);
-  //		shrink_dcache_parent(dentry);
-  //		spin_lock(&dentry->d_lock);
-  //	}
-  //  
-  //	/*
-  //	 * Somebody else still using it?
-  //	 *
-  //	 * If it's a directory, we can't drop it
-  //	 * for fear of somebody re-populating it
-  //	 * with children (even though dropping it
-  //	 * would make it unreachable from the root,
-  //	 * we might still populate it if it was a
-  //	 * working directory or similar).
-  //	 */
-  //	if (dentry->d_count > 1) {
-  //		if (dentry->d_inode && S_ISDIR(dentry->d_inode->i_mode)) {
-  //			spin_unlock(&dentry->d_lock);
-  //			return -EBUSY;
-  //		}
-  //	}
-  //  
-  //	__d_drop(dentry);
-  //	spin_unlock(&dentry->d_lock);
-	return 0;
-}
-
 
 // Invoked when super block is killed
 void d_genocide(struct dentry *root) {

@@ -43,7 +43,7 @@ struct cinq_fsnode *fsnode_new(const char *name, struct cinq_fsnode *parent) {
   write_lock(&file_systems.lock);
   struct cinq_fsnode *dup = cfs_find_(&file_systems, name);
   if (unlikely(dup)) {
-    DEBUG_("[Warning@fsnode_new] duplicate names: %s\n", name);
+    DEBUG_("[Warn@fsnode_new] duplicate names: %s\n", name);
     fsnode_free_(fsnode);
     wr_release_return(&file_systems.lock, NULL);
   }
@@ -61,7 +61,7 @@ struct cinq_fsnode *fsnode_new(const char *name, struct cinq_fsnode *parent) {
 void fsnode_evict(struct cinq_fsnode *fsnode) {
   d_genocide(fsnode->fs_root);
   if (fsnode->fs_children) {
-    DEBUG_("[Warning@fsnode_evict] failed to delete fsnode %lx(%s) "
+    DEBUG_("[Warn@fsnode_evict] failed to delete fsnode %lx(%s) "
            "who still has children.\n", fsnode->fs_id, fsnode->fs_name);
     return;
   }
@@ -107,7 +107,7 @@ void fsnode_move(struct cinq_fsnode *child,
 
 void fsnode_bridge(struct cinq_fsnode *out) {
   DEBUG_ON_(HASH_CNT(fs_child, out->fs_children) > 1,
-            "[Warning@fsnode_bridge] crossing out who has more than one child: "
+            "[Warn@fsnode_bridge] crossing out who has more than one child: "
             "%lx(%s).\n", out->fs_id, out->fs_name);
   if (out->fs_children) {
     fsnode_move(out->fs_children, out->fs_parent);

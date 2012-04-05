@@ -494,10 +494,10 @@ extern void d_instantiate(struct dentry *dentry, struct inode * inode);
 
 extern struct dentry *dget(struct dentry *dentry);
 
+extern void dput(struct dentry *dentry);
+
 extern struct dentry *d_splice_alias(struct inode *inode,
                                      struct dentry *dentry);
-extern int d_invalidate(struct dentry * dentry);
-
 extern void d_genocide(struct dentry *root);
 
 extern unsigned int current_fsuid(void);
@@ -521,8 +521,14 @@ extern struct inode *new_inode(struct super_block *sb);
 
 
 // include/linux/fs.h
-static inline void inc_nlink(struct inode *inode) {
+static inline void inc_nlink(struct inode *inode)
+{
   inode->i_nlink++;
+}
+
+static inline void drop_nlink(struct inode *inode)
+{
+  inode->i_nlink--;
 }
 
 /**
@@ -572,6 +578,14 @@ static inline void iput(struct inode *inode) {
       destroy_inode(inode);
     }
   }
+}
+
+/*
+ * get additional reference to inode; caller must already hold one.
+ */
+static inline void ihold(struct inode *inode) {
+  DEBUG_ON_(atomic_inc_return(&inode->i_count) < 2,
+            "[Warn@ihold] inode count < 2.\n");
 }
 
 /**

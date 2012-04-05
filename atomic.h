@@ -133,4 +133,9 @@ static inline int atomic_add_negative( int i, atomic_t *v )
        return (__sync_add_and_fetch(&v->counter, i) < 0);
 }
 
+// Added by Jinglei Ren <jinglei.ren@gmail.com>
+static inline int atomic_inc_return(atomic_t *v) {
+  return __sync_add_and_fetch(&v->counter, 1);
+}
+
 #endif

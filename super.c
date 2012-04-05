@@ -65,7 +65,7 @@ void cinq_kill_sb (struct super_block *sb) {
     cnode_evict_all(i_cnode(sb->s_root->d_inode));
     d_genocide(sb->s_root);
   }
-  DEBUG_ON_(!sb->s_root, "[Warning@cinq_kill_sb]: invoked on null dentry.\n");
+  DEBUG_ON_(!sb->s_root, "[Warn@cinq_kill_sb]: invoked on null dentry.\n");
 }
 
 void cinq_evict_inode(struct inode *inode) {

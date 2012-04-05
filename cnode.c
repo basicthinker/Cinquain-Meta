@@ -211,7 +211,7 @@ static struct inode *cinq_get_inode_(const struct inode *dir, int mode) {
         //  inode->i_op = &page_symlink_inode_operations;
         break;
       default:
-        DEBUG_("[Warning@cinq_new_inode] mode not matched under %lx.\n",
+        DEBUG_("[Warn@cinq_new_inode] mode not matched under %lx.\n",
                dir->i_ino);
         break;
     }
@@ -433,10 +433,22 @@ struct dentry *cinq_lookup(struct inode *dir, struct dentry *dentry,
 
 int cinq_link(struct dentry *old_dentry, struct inode *dir,
               struct dentry *dentry) {
-  return 0;
+	struct inode *inode = old_dentry->d_inode;
+  
+	inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
+	inc_nlink(inode);
+	ihold(inode);
+	dget(dentry);
+	d_instantiate(dentry, inode);
+	return 0;
 }
 
 int cinq_unlink(struct inode *dir, struct dentry *dentry) {
+  struct inode *inode = dentry->d_inode;
+  
+  inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
+  drop_nlink(inode);
+  dput(dentry);
   return 0;
 }
 
