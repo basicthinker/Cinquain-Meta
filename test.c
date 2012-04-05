@@ -30,7 +30,7 @@ static void print_fs_tree_(const int depth, const int no,
     fprintf(stdout, "  ");
   }
   // check global list
-  struct cinq_fsnode *fsnode = cfs_find(&file_systems, root->fs_name);
+  struct cinq_fsnode *fsnode = cfs_find_syn(&file_systems, root->fs_name);
   if (fsnode != root) {
     fprintf(stderr, "Error locating fsnode %lx: %p != %p\n",
             root->fs_id, fsnode, root);
@@ -304,9 +304,7 @@ static void *rand_create_(void *droot) {
     // The fsnode can be determined by various ways.
     // Note that this is who takes the operation,
     // NOT always be d_fs(found_dent) who can be an ancestor.
-    read_lock(&file_systems.lock);
-    struct cinq_fsnode *req_fs = cfs_find(&file_systems, fs_name);
-    read_unlock(&file_systems.lock);
+    struct cinq_fsnode *req_fs = cfs_find_syn(&file_systems, fs_name);
     file_dent->d_fsdata = req_fs;
     
     if (container->i_op->create(container, file_dent, mode, NULL)) {

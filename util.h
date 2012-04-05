@@ -112,6 +112,10 @@ typedef pthread_mutex_t spinlock_t;
 #define spin_lock(lock_p) (pthread_mutex_lock(lock_p))
 #define spin_unlock(lock_p) (pthread_mutex_unlock(lock_p))
 
+#define rd_release_return(lock_p, err) return (read_unlock(lock_p), err)
+#define wr_release_return(lock_p, err) return (write_unlock(lock_p), err)
+#define sp_release_return(lock_p, err) return (spin_unlock(lock_p), err)
+
 #define unlikely(cond) (cond)
 
 #define CURRENT_TIME_SEC ((struct timespec) { time(NULL), 0 })
