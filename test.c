@@ -381,15 +381,17 @@ int main(int argc, const char * argv[]) {
   const int k_fsn = HASH_CNT(fs_member, file_systems.fs_table);
   pthread_t mkdir_t[k_fsn];
   memset(mkdir_t, 0, sizeof(mkdir_t));
-  int ti = 0;
-  for (fs = file_systems.fs_table; fs != NULL; fs = fs->fs_member.next) {
-    int err = pthread_create(&mkdir_t[ti], NULL, make_dir_tree, fs);
+  int ti, err;
+  for (ti = 0, fs = file_systems.fs_table; fs != NULL;
+       ++ti, fs = fs->fs_member.next) {
+    err = pthread_create(&mkdir_t[ti], NULL, make_dir_tree, fs);
     DEBUG_ON_(err, "[Error@main] error code of pthread_create: %d.\n", err);
   }
   fprintf(stdout, "\nWith three-layer dir tree:\n");
   void *status;
   for (ti = 0; ti < k_fsn; ++ti) {
-    pthread_join(mkdir_t[ti], &status);
+    err = pthread_join(mkdir_t[ti], &status);
+    DEBUG_ON_(err, "[Error@main] error code of pthread_join: %d.\n", err);
   }
   print_dir_tree(i_cnode(iroot));
 
@@ -397,22 +399,24 @@ int main(int argc, const char * argv[]) {
   pthread_t lookup_thr[LOOKUP_THR_NUM_];
   memset(lookup_thr, 0, sizeof(lookup_thr));
   for (ti = 0; ti < LOOKUP_THR_NUM_; ++ti) {
-    int err = pthread_create(&lookup_thr[ti], NULL, rand_lookup_, droot);
+    err = pthread_create(&lookup_thr[ti], NULL, rand_lookup_, droot);
     DEBUG_ON_(err, "[Error@main] error code of pthread_create: %d.\n", err);
   }
   for (ti = 0; ti < LOOKUP_THR_NUM_; ++ti) {
-    pthread_join(lookup_thr[ti], &status);
+    err = pthread_join(lookup_thr[ti], &status);
+    DEBUG_ON_(err, "[Error@main] error code of pthread_join: %d.\n", err);
   }
   
   fprintf(stdout, "\nTest create:\n");
   pthread_t create_thr[CREATE_THR_NUM_];
   memset(create_thr, 0, sizeof(create_thr));
   for (ti = 0; ti < CREATE_THR_NUM_; ++ti) {
-    int err = pthread_create(&create_thr[ti], NULL, rand_create_, droot);
+    err = pthread_create(&create_thr[ti], NULL, rand_create_, droot);
     DEBUG_ON_(err, "[Error@main] error code of pthread_create: %d.\n", err);
   }
   for (ti = 0; ti < CREATE_THR_NUM_; ++ti) {
-    pthread_join(create_thr[ti], &status);
+    err = pthread_join(create_thr[ti], &status);
+    DEBUG_ON_(err, "[Error@main] error code of pthread_join: %d.\n", err);
   }
   
   int expected_num = NUM_LOOKUP_ * LOOKUP_THR_NUM_;

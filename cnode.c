@@ -392,7 +392,7 @@ static inline struct inode *cinq_lookup_(const struct inode *dir,
   while (!tag) {
     if (fsnode_is_root(fs)) {
       DEBUG_("[Info@cinq_lookup_] no file system has that dir or file:"
-             "%s from %lx", name, fs->fs_id);
+             "%s from %lx.\n", name, fs->fs_id);
       rd_release_return(&child->ci_tags_lock, NULL);
     }
     fs = fs->fs_parent;
