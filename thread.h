@@ -95,12 +95,14 @@ static inline void thread_init(struct thread_task *thr_task,
 static inline void thread_run(struct thread_task *thr_task) {
   int err = pthread_create(thr_task->thread, NULL,
                            thr_task->func, thr_task->data);
-  DEBUG_ON_(err,
-            "[Error@thread_run_] error code of pthread_create: %d.\n", err);
+  DEBUG_ON_(err, "[Error@thread_run_] error code of pthread_create:"
+            " %d.\n", err);
 }
 
 static inline int thread_stop(struct thread_task *thr_task) {
-  return pthread_cancel(*thr_task->thread);
+  int err = pthread_cancel(*thr_task->thread);
+  free(thr_task->thread);
+  return err;
 }
 
 #endif // __KERNEL__

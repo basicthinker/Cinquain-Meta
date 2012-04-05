@@ -419,17 +419,20 @@ int main(int argc, const char * argv[]) {
     DEBUG_ON_(err, "[Error@main] error code of pthread_join: %d.\n", err);
   }
   
-  int expected_num = NUM_LOOKUP_ * LOOKUP_THR_NUM_;
-  fprintf(stdout, "\nlookup: %d/%d checked OK [%s].\n", lookup_num_ok_, expected_num,
-          lookup_num_ok_ < expected_num ? "NOT PASSED" : "PASSED");
-  
-  expected_num = NUM_CREATE_ * CREATE_THR_NUM_;
-  fprintf(stdout, "create: %d/%d checked OK [%s].\n", create_num_ok_, expected_num,
-          create_num_ok_ < expected_num ? "NOT PASSED" : "PASSED");
-  
   // Kill file systems
   cinqfs.kill_sb(droot->d_sb);
   fsnode_evict_all(fsroot);
+  
+  // Show results
+  int expected_num = NUM_LOOKUP_ * LOOKUP_THR_NUM_;
+  fprintf(stdout, "\nlookup: %d/%d checked OK [%s].\n",
+          lookup_num_ok_, expected_num,
+          lookup_num_ok_ < expected_num ? "NOT PASSED" : "PASSED");
+  
+  expected_num = NUM_CREATE_ * CREATE_THR_NUM_;
+  fprintf(stdout, "create: %d/%d checked OK [%s].\n\n",
+          create_num_ok_, expected_num,
+          create_num_ok_ < expected_num ? "NOT PASSED" : "PASSED");
   
   return 0;
 }

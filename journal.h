@@ -50,7 +50,7 @@ static inline void journal_init(struct cinq_journal *journal, char *name) {
   journal->name = name;
 }
 
-static inline int journal_empty(struct cinq_journal *journal) {
+static inline int journal_empty_syn(struct cinq_journal *journal) {
   spin_lock(&journal->lock);
   int ret = list_empty(&journal->list);
   spin_unlock(&journal->lock);

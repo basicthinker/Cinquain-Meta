@@ -50,18 +50,18 @@ static int cinq_fill_super_(struct super_block *sb, void *data, int silent) {
 struct dentry *cinq_mount (struct file_system_type *fs_type, int flags,
                            const char *dev_name, void *data) {
   journal_init(&cinq_journal, "Cinquain");
-//  thread_init(&journal_thread, journal_writeback, &cinq_journal,
-//              "cinquain-journal");
-//  thread_run(&journal_thread);
+  thread_init(&journal_thread, journal_writeback, &cinq_journal,
+              "cinquain-journal");
+  thread_run(&journal_thread);
   return mount_nodev(fs_type, flags, data, cinq_fill_super_);
 }
 
 void cinq_kill_sb (struct super_block *sb) {
   if (sb->s_root) {
-//    while (!journal_empty(&cinq_journal)) {
-//      sleep(1);
-//    }
-//    thread_stop(&journal_thread);
+    while (!journal_empty_syn(&cinq_journal)) {
+      sleep(1);
+    }
+    thread_stop(&journal_thread);
     cnode_evict_all(i_cnode(sb->s_root->d_inode));
     d_genocide(sb->s_root);
   }
@@ -78,29 +78,30 @@ void cinq_evict_inode(struct inode *inode) {
 THREAD_FUNC_(journal_writeback)(void *data) {
   struct cinq_journal *journal = data;
   struct journal_entry *entry;
+  int num = 0;
   
   while (!thread_should_stop()) {
     set_current_state(TASK_RUNNING);
     
-    while (!journal_empty(journal)) {
+    while (!journal_empty_syn(journal)) {
       entry = journal_get_syn(journal);
       int key_size = sizeof(entry->key);
-      char key_str[key_size + 1];
-      strncpy(key_str, entry->key, key_size);
-      key_str[key_size] = '\0';
       switch (entry->action) {
         case CREATE:
-          fprintf(stdout, "journal - CREATE key '%s'.\n", key_str);
+          fprintf(stdout, "journal (%d)\t- CREATE key %lx(%d).\n",
+                  ++num, *((unsigned long *)entry->key), key_size);
           break;
         case UPDATE:
-          fprintf(stdout, "journal - UPDATE key '%s'.\n", key_str);
+          fprintf(stdout, "journal (%d)\t- UPDATE key %lx(%d).\n",
+                  ++num, *((unsigned long *)entry->key), key_size);
           break;
         case DELETE:
-          fprintf(stdout, "journal - UPDATE key '%s'.\n", key_str);
+          fprintf(stdout, "journal (%d)\t- UPDATE key %lx(%d).\n",
+                  ++num, *((unsigned long *)entry->key), key_size);
           break;
         default:
-          DEBUG_("[Error@journal_writeback] journal entry action is NOT valid: %d.\n",
-                 entry->action);
+          DEBUG_("[Error@journal_writeback] journal entry action is NOT valid:"
+                 " %d.\n", entry->action);
       }
     }
     
