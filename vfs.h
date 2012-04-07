@@ -558,6 +558,9 @@ static inline void destroy_inode(struct inode *inode) {
   else
     // call_rcu(&inode->i_rcu, i_callback);
     free(inode);
+#ifdef CINQ_DEBUG
+  atomic_dec(&num_inodes_);
+#endif // CINQ_DEBUG
 }
 
 /**

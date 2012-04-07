@@ -451,6 +451,8 @@ int main(int argc, const char * argv[]) {
     DEBUG_ON_(err, "[Error@main] error code of pthread_join: %d.\n", err);
   }
   
+  int max_inode_num = atomic_read(&num_inodes_);
+  
   // Kill file systems
   cinqfs.kill_sb(droot->d_sb);
   fsnode_evict_all(fsroot);
@@ -465,9 +467,14 @@ int main(int argc, const char * argv[]) {
   fprintf(stdout, "create: %d/%d checked OK [%s].\n",
           create_num_ok_, expected_num,
           create_num_ok_ < expected_num ? "NOT PASSED" : "PASSED");
-  fprintf(stdout, "link: %d/%d checked OK [%s].\n\n",
+  fprintf(stdout, "link: %d/%d checked OK [%s].\n",
           link_num_ok_, expected_num,
           link_num_ok_ < expected_num ? "NOT PASSED" : "PASSED");
+  
+  int final_inode_num = atomic_read(&num_inodes_);
+  fprintf(stdout, "inode leak test: %d -> %d\t[%s].\n",
+          max_inode_num, final_inode_num,
+          final_inode_num ? "NOT PASSED" : "PASSED");
   
   return 0;
 }

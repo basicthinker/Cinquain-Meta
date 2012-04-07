@@ -34,6 +34,15 @@
 
 #endif
 
+#ifdef CINQ_DEBUG
+atomic_t num_inodes_;
+#endif // CINQ_DEBUG
+
+#ifndef CINQ_DEBUG
+#define DEBUG_ON_(cond, ...) ((void)(cond))
+#define DEBUG_(...)
+#endif // CINQ_DEBUG
+
 #ifdef __KERNEL__ // intended for Linux
 /* Kernel (exchangable) */
 
@@ -46,13 +55,9 @@
 #define PAGE_CACHE_SIZE         ((uint64_t)1 << PAGE_CACHE_SHIFT)
 #define PAGE_CACHE_MASK         (~(PAGE_SIZE - 1))
 
-#define LOG(...) (fprintf(stdout, __VA_ARGS__))
 #ifdef CINQ_DEBUG
 #define DEBUG_ON_(cond, ...) if (cond) { fprintf(stderr, __VA_ARGS__); }
 #define DEBUG_(...) (fprintf(stderr, __VA_ARGS__))
-#else
-#define DEBUG_ON_(cond, ...) ((void)(cond))
-#define DEBUG_(...)
 #endif // CINQ_DEBUG
 
 #define fsnode_malloc_() \

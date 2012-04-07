@@ -230,6 +230,10 @@ static inline struct inode *alloc_inode_(struct super_block *sb)
 	if (!inode)
 		return NULL;
   
+#ifdef CINQ_DEBUG
+  atomic_inc(&num_inodes_);
+#endif // CINQ_DEBUG
+  
   // inode_init_once // expanded as following
   memset(inode, 0, sizeof(*inode));
   //  INIT_HLIST_NODE(&inode->i_hash);
@@ -245,6 +249,11 @@ static inline struct inode *alloc_inode_(struct super_block *sb)
 			inode->i_sb->s_op->destroy_inode(inode);
 		else
 			free(inode); // adjusted for user space
+
+#ifdef CINQ_DEBUG
+    atomic_dec(&num_inodes_);
+#endif // CINQ_DEBUG
+    
 		return NULL;
 	}
   
