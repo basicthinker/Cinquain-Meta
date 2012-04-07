@@ -25,6 +25,10 @@ ssize_t cinq_write(struct file *filp, const char *buf, size_t len,
   return 0;
 }
 
-int cinq_release_file (struct inode * inode, struct file * filp) {
+int cinq_release_file(struct inode * inode, struct file * filp) {
+  return 0;
+}
+
+int cinq_readdir(struct file * filp, void * dirent, filldir_t filldir) {
   return 0;
 }

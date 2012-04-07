@@ -252,8 +252,9 @@ static void *rand_lookup_(void *droot) {
   pthread_exit(NULL);
 }
 
-static spinlock_t create_num_lock_;
+static spinlock_t create_link_num_lock_;
 static int create_num_ok_ = 0;
+static int link_num_ok_ = 0;
 
 // Includes example for invoking cinq_create, cinq_link
 static void *rand_create_link_(void *droot) {
@@ -262,10 +263,12 @@ static void *rand_create_link_(void *droot) {
   const int fs_j = rand() % FS_CHILDREN_ + 1;
   const int fs_k = rand() % (FS_CHILDREN_ + 1);
   sprintf(fs_name, "0_%x_%x", fs_j, fs_k);
+  struct cinq_fsnode *req_fs = cfs_find_syn(&file_systems, fs_name);
   
   const int k_num_seg = 4;
   char dir[k_num_seg][MAX_NAME_LEN + 1];
-  int num_ok = 0;
+  int num_create_ok = 0;
+  int num_link_ok = 0;
   int i;
   for (i = 0; i < NUM_CREATE_; ++i) {
     // manually fills dir segments
@@ -276,8 +279,7 @@ static void *rand_create_link_(void *droot) {
     if (fs_j <= dir_j && fs_k <= dir_k) {
       --i;
       continue;
-    }
-    
+    }    
     // lookup path "/fs_name/dir[1]/dir[2]/dir[3]"
     sprintf(dir[0], "%s", fs_name); // the first segment is special
     sprintf(dir[1], "%x", dir_i);   // the rest are normal ones under root
@@ -304,7 +306,6 @@ static void *rand_create_link_(void *droot) {
     // The fsnode can be determined by various ways.
     // Note that this is who takes the operation,
     // NOT always be d_fs(found_dent) who can be an ancestor.
-    struct cinq_fsnode *req_fs = cfs_find_syn(&file_systems, fs_name);
     file_dent->d_fsdata = req_fs;
     
     if (container->i_op->create(container, file_dent, mode, NULL)) {
@@ -320,6 +321,8 @@ static void *rand_create_link_(void *droot) {
     struct qstr q_link_name =
         { .name = (unsigned char *)link_name, .len = strlen(link_name) };
     struct dentry *link_dent = d_alloc(found_dent, &q_link_name);
+    link_dent->d_fsdata = req_fs;
+    
     if (container->i_op->link(file_dent, container, link_dent)) {
       DEBUG_("[Error@rand_create_link_] failed to link to %s@%s.\n",
              file_name, i_cnode(container)->ci_name);
@@ -340,11 +343,27 @@ static void *rand_create_link_(void *droot) {
             dir[k_num_seg - 1], fs_name,
             file_name, found_dent ? d_fs(found_dent)->fs_name : "-",
             pass ? "OK" : "WRONG");
-    if (pass) ++num_ok;
+    if (pass) ++num_create_ok;
+    else continue;
+    
+    pass = 1;
+    sprintf(dir_file[k_num_seg], "__%s", file_name);
+    struct dentry *found_dent_2 = do_lookup_(droot, (void *)dir_file,
+                                             k_num_seg + 1);
+    if (!found_dent_2 || found_dent->d_inode != found_dent_2->d_inode) {
+      pass = 0;
+    }
+    fprintf(stdout, "rand_link_: %s@%s -> %s@%s\t%s\n",
+            dir_file[k_num_seg], dir_file[k_num_seg - 1],
+            found_dent_2 ? i_cnode(found_dent_2->d_inode)->ci_name : "-",
+            found_dent_2 ? i_cnode(found_dent_2->d_parent->d_inode)->ci_name : "-",
+            pass ? "OK" : "WRONG");
+    if (pass) ++num_link_ok;
   } // for
-  spin_lock(&create_num_lock_);
-  create_num_ok_ += num_ok;
-  spin_unlock(&create_num_lock_);
+  spin_lock(&create_link_num_lock_);
+  create_num_ok_ += num_create_ok;
+  link_num_ok_ += num_link_ok;
+  spin_unlock(&create_link_num_lock_);
   pthread_exit(NULL);
 }
 
@@ -443,9 +462,12 @@ int main(int argc, const char * argv[]) {
           lookup_num_ok_ < expected_num ? "NOT PASSED" : "PASSED");
   
   expected_num = NUM_CREATE_ * CREATE_THR_NUM_;
-  fprintf(stdout, "create/link: %d/%d checked OK [%s].\n\n",
+  fprintf(stdout, "create: %d/%d checked OK [%s].\n",
           create_num_ok_, expected_num,
           create_num_ok_ < expected_num ? "NOT PASSED" : "PASSED");
+  fprintf(stdout, "link: %d/%d checked OK [%s].\n\n",
+          link_num_ok_, expected_num,
+          link_num_ok_ < expected_num ? "NOT PASSED" : "PASSED");
   
   return 0;
 }

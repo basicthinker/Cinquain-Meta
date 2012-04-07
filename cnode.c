@@ -203,7 +203,7 @@ static struct inode *cinq_get_inode_(const struct inode *dir, int mode) {
         break;
       case S_IFDIR:
         inode->i_op = &cinq_dir_inode_operations;
-        //	inode->i_fop = &simple_dir_operations;
+        inode->i_fop = &cinq_dir_operations;
         /* directory inodes start off with i_nlink == 2 (for "." entry) */
         inc_nlink(inode);
         break;
@@ -321,7 +321,6 @@ static int cinq_mknod(struct inode *dir, struct dentry *dentry, int mode) {
   }
   
   d_instantiate(dentry, tag->t_inode);
-  dget(dentry);
   dir->i_mtime = dir->i_ctime = CURRENT_TIME;
   // journal_inode(dir, UPDATE);
   
@@ -360,7 +359,6 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
     cnode_add_tag_syn(parent, tag);
     
     d_instantiate(dentry, fs_inode);
-    dget(dentry);
     dir->i_mtime = dir->i_ctime = CURRENT_TIME;
     
     journal_inode(fs_inode, CREATE);

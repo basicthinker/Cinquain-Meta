@@ -236,6 +236,8 @@ extern ssize_t cinq_write(struct file *filp, const char *buf, size_t len,
                           loff_t *ppos);
 extern int cinq_release_file (struct inode * inode, struct file * filp);
 
+extern int cinq_readdir (struct file * filp, void * dirent, filldir_t filldir);
+
 
 /* cinq_meta.c */
 extern struct cinq_file_systems file_systems;
@@ -244,5 +246,6 @@ extern const struct super_operations cinq_super_operations;
 extern const struct inode_operations cinq_dir_inode_operations;
 extern const struct inode_operations cinq_file_inode_operations;
 extern const struct file_operations cinq_file_operations;
+extern const struct file_operations cinq_dir_operations;
 
 #endif // CINQUAIN_META_CINQ_META_H_

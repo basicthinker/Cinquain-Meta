@@ -123,7 +123,11 @@ struct dentry *mount_nodev(struct file_system_type *fs_type,
 		return ERR_PTR(error);
 	}
 	s->s_flags |= MS_ACTIVE;
-	return dget(s->s_root);
+	// return dget(s->s_root); // expanded
+  spin_lock(&s->s_root->d_lock);
+  s->s_root->d_count++; // to prevent being destroyed
+  spin_unlock(&s->s_root->d_lock);
+  return s->s_root;
 }
 
 
@@ -145,7 +149,7 @@ static inline int inode_init_always_(struct super_block *sb, struct inode *inode
   inode->i_sb = sb;
   inode->i_blkbits = sb->s_blocksize_bits;
   inode->i_flags = 0;
-  // atomic_set(&inode->i_count, 1);
+  atomic_set(&inode->i_count, 1);
   inode->i_op = &empty_iops;
   inode->i_fop = &empty_fops;
   inode->i_nlink = 1;

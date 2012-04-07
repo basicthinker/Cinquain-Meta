@@ -52,3 +52,8 @@ const struct file_operations cinq_file_operations = {
 	.open     = cinq_open,
 	.release	= cinq_release_file
 };
+
+const struct file_operations cinq_dir_operations = {
+  .readdir  = cinq_readdir
+};
+
