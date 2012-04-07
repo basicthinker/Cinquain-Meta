@@ -152,7 +152,7 @@ static void *make_dir_tree(void *fsnode) {
 }
 
 // Example for invoking cinq_lookup
-static struct dentry *path_lookup_(struct dentry *droot,
+static struct dentry *do_lookup_(struct dentry *droot,
                                    char seg[][MAX_NAME_LEN + 1],
                                    const int num) {
   struct dentry *den = droot;           // (1) start from super_block.s_root
@@ -212,7 +212,7 @@ static void *rand_lookup_(void *droot) {
     // Omits dcache lookup.
     // Dentry cache should be firstly used in practice.
     
-    struct dentry *found_dent = path_lookup_(droot, (void *)dir, k_num_seg);
+    struct dentry *found_dent = do_lookup_(droot, (void *)dir, k_num_seg);
     if (!found_dent) { // when target path is not found
       if (dir_i >= CNODE_CHILDREN_ || dir_j >= CNODE_CHILDREN_ ||
           dir_k >= CNODE_CHILDREN_) { // when it should be not-found
@@ -255,8 +255,8 @@ static void *rand_lookup_(void *droot) {
 static spinlock_t create_num_lock_;
 static int create_num_ok_ = 0;
 
-// Includes example for invoking cinq_create
-static void *rand_create_(void *droot) {
+// Includes example for invoking cinq_create, cinq_link
+static void *rand_create_link_(void *droot) {
   // randomly choose client file system
   char fs_name[MAX_NAME_LEN + 1];
   const int fs_j = rand() % FS_CHILDREN_ + 1;
@@ -287,7 +287,7 @@ static void *rand_create_(void *droot) {
     // Omits dcache lookup.
     // Dentry cache should be firstly used in practice.
     
-    struct dentry *found_dent = path_lookup_(droot, (void *)dir, k_num_seg);
+    struct dentry *found_dent = do_lookup_(droot, (void *)dir, k_num_seg);
     if (!found_dent || strcmp(fs_name, d_fs(found_dent)->fs_name) == 0) {
       --i;
       continue;
@@ -308,10 +308,23 @@ static void *rand_create_(void *droot) {
     file_dent->d_fsdata = req_fs;
     
     if (container->i_op->create(container, file_dent, mode, NULL)) {
-      DEBUG_("[Error@rand_create] failed to create %s@%s.\n",
-             file_name, i_cnode(found_dent->d_inode)->ci_name);
+      DEBUG_("[Error@rand_create_link_] failed to create %s@%s.\n",
+             file_name, i_cnode(container)->ci_name);
       continue;
     } 
+    
+    // Example for invoking cinq_link
+    // reuse container and file_dent
+    char link_name[MAX_NAME_LEN + 1];
+    sprintf(link_name, "__%s", file_name); // adds some prefix to denote link
+    struct qstr q_link_name =
+        { .name = (unsigned char *)link_name, .len = strlen(link_name) };
+    struct dentry *link_dent = d_alloc(found_dent, &q_link_name);
+    if (container->i_op->link(file_dent, container, link_dent)) {
+      DEBUG_("[Error@rand_create_link_] failed to link to %s@%s.\n",
+             file_name, i_cnode(container)->ci_name);
+      continue;
+    }
     
     // repeat lookup to check
     // the following is only for test purpose
@@ -319,7 +332,7 @@ static void *rand_create_(void *droot) {
     char dir_file[k_num_seg + 1][MAX_NAME_LEN + 1];
     memcpy(dir_file, dir, sizeof(dir));
     strncpy(dir_file[k_num_seg], file_name, q_file_name.len + 1);
-    found_dent = path_lookup_(droot, (void *)dir_file, k_num_seg + 1);
+    found_dent = do_lookup_(droot, (void *)dir_file, k_num_seg + 1);
     if (!found_dent || d_fs(found_dent) != req_fs) {
       pass = 0;
     }
@@ -411,7 +424,7 @@ int main(int argc, const char * argv[]) {
   pthread_t create_thr[CREATE_THR_NUM_];
   memset(create_thr, 0, sizeof(create_thr));
   for (ti = 0; ti < CREATE_THR_NUM_; ++ti) {
-    err = pthread_create(&create_thr[ti], NULL, rand_create_, droot);
+    err = pthread_create(&create_thr[ti], NULL, rand_create_link_, droot);
     DEBUG_ON_(err, "[Error@main] error code of pthread_create: %d.\n", err);
   }
   for (ti = 0; ti < CREATE_THR_NUM_; ++ti) {
@@ -425,12 +438,12 @@ int main(int argc, const char * argv[]) {
   
   // Show results
   int expected_num = NUM_LOOKUP_ * LOOKUP_THR_NUM_;
-  fprintf(stdout, "\nlookup: %d/%d checked OK [%s].\n",
+  fprintf(stdout, "\nmkdir/lookup: %d/%d checked OK [%s].\n",
           lookup_num_ok_, expected_num,
           lookup_num_ok_ < expected_num ? "NOT PASSED" : "PASSED");
   
   expected_num = NUM_CREATE_ * CREATE_THR_NUM_;
-  fprintf(stdout, "create: %d/%d checked OK [%s].\n\n",
+  fprintf(stdout, "create/link: %d/%d checked OK [%s].\n\n",
           create_num_ok_, expected_num,
           create_num_ok_ < expected_num ? "NOT PASSED" : "PASSED");
   

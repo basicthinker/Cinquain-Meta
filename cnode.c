@@ -79,7 +79,7 @@ static inline void cnode_rm_tag_syn(struct cinq_inode *cnode,
 }
 
 static inline void tag_evict(struct cinq_tag *tag) {
-  destroy_inode(tag->t_inode);
+  iput(tag->t_inode);
   cnode_rm_tag_syn(tag->t_host, tag);
   tag_free_(tag);
 }
@@ -292,6 +292,8 @@ static int cinq_mknod(struct inode *dir, struct dentry *dentry, int mode) {
         wr_release_return(&child->ci_tags_lock, -ENOSPC);
       }
       cnode_add_tag_(child, tag);
+      
+      journal_inode(inode, CREATE);
     } else {
       tag->t_mode = (mode >> CINQ_MODE_SHIFT);
       inode_init_owner(tag->t_inode, dir, mode);
@@ -301,10 +303,11 @@ static int cinq_mknod(struct inode *dir, struct dentry *dentry, int mode) {
     journal_cnode(child, UPDATE);
   } else {
     child = cnode_new_(name);
+    if (unlikely(!child)) wr_release_return(&parent->ci_children_lock, -ENOSPC);
     struct inode *inode = cinq_get_inode_(dir, mode);
-    if (!inode) wr_release_return(&parent->ci_children_lock, -ENOSPC);
+    if (unlikely(!inode)) wr_release_return(&parent->ci_children_lock, -ENOSPC);
     tag = tag_new_(fs, mode >> CINQ_MODE_SHIFT, inode);
-    if (!tag) {
+    if (unlikely(!tag)) {
       iput(inode);
       wr_release_return(&parent->ci_children_lock, -ENOSPC);
     }
@@ -343,7 +346,7 @@ int cinq_create(struct inode *dir, struct dentry *dentry,
 int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
   struct cinq_inode *parent = i_cnode(dir);
   struct cinq_fsnode *fs = dentry->d_fsdata;
-  if (!fs) {
+  if (unlikely(!fs)) {
     DEBUG_("[Error@cinq_mkdir] null fsnode for %s under dir %lx.\n",
             dentry->d_name.name, dir->i_ino);
     return -EINVAL;
@@ -431,16 +434,84 @@ struct dentry *cinq_lookup(struct inode *dir, struct dentry *dentry,
   return d_splice_alias(inode, dentry);
 }
 
+static int cinq_add_link_(struct dentry *dentry, struct inode *inode) {
+  char *name = (char *)dentry->d_name.name;
+  struct inode *dir = dentry->d_parent->d_inode;
+  if (unlikely(!dir)) {
+    DEBUG_("[Error@cinq_add_link_] link to invalid dentry without parent inode:"
+           " %s.\n", name);
+    return -EINVAL;
+  }
+  struct cinq_inode *parent = i_cnode(dir);
+  struct cinq_fsnode *fs = dentry->d_fsdata;
+  struct cinq_inode *child;
+  struct cinq_tag *tag;
+  
+  write_lock(&parent->ci_children_lock);
+  child = cnode_find_child_(parent, name);
+  if (child) {
+    write_unlock(&parent->ci_children_lock);
+    
+    write_lock(&child->ci_tags_lock);
+    tag = cnode_find_tag_(child, fs);
+    if (!tag) {
+      tag = tag_malloc_();
+      if (unlikely(!tag)) wr_release_return(&child->ci_tags_lock, -ENOSPC);
+      tag->t_fs = fs;
+      tag->t_inode = inode;
+      tag->t_mode = CINQ_MERGE;
+      cnode_add_tag_(child, tag);
+    } else {
+      DEBUG_("[Warn@cinq_add_link_] link an existing entry: %s.\n", name);
+      return -EINVAL;
+    }
+    write_unlock(&child->ci_tags_lock);
+    
+    journal_cnode(child, UPDATE);
+  } else {
+    child = cnode_new_(name);
+    if (!child) wr_release_return(&parent->ci_children_lock, -ENOSPC);
+    tag = tag_malloc_();
+    if (unlikely(!tag)) wr_release_return(&parent->ci_children_lock, -ENOSPC);
+    tag->t_fs = fs;
+    tag->t_inode = inode;
+    tag->t_mode = CINQ_MERGE;
+    cnode_add_tag_(child, tag);
+    cnode_add_child_(parent, child);
+    write_unlock(&parent->ci_children_lock);
+    
+    journal_cnode(child, CREATE);
+    journal_cnode(parent, UPDATE);
+  }
+
+  if (i_tag(dir)->t_fs != fs) {
+    cnode_tag_parents_(tag->t_inode, fs);
+  }
+  return 0;
+}
+
 int cinq_link(struct dentry *old_dentry, struct inode *dir,
               struct dentry *dentry) {
 	struct inode *inode = old_dentry->d_inode;
-  
+  if (unlikely(!inode)) {
+    DEBUG_("[Error@cinq_link] link to invalid dentry without inode: %s.\n",
+           old_dentry->d_name.name);
+    return -EINVAL;
+  }
 	inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
+  
 	inc_nlink(inode);
 	ihold(inode);
-	dget(dentry);
-	d_instantiate(dentry, inode);
-	return 0;
+	
+  int err = cinq_add_link_(dentry, inode);
+  if (!err) {
+    d_instantiate(dentry, inode);
+    return 0;
+  }
+  
+  drop_nlink(inode); // cancel inc_nlink()
+  iput(inode); // cancel ihold()
+	return err;
 }
 
 int cinq_unlink(struct inode *dir, struct dentry *dentry) {
