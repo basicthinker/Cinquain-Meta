@@ -432,7 +432,7 @@ struct dentry *cinq_lookup(struct inode *dir, struct dentry *dentry,
   return d_splice_alias(inode, dentry);
 }
 
-static int cinq_add_link_(struct dentry *dentry, struct inode *inode) {
+static int cinq_add_link_(struct dentry *dentry, const struct inode *inode) {
   char *name = (char *)dentry->d_name.name;
   struct inode *dir = dentry->d_parent->d_inode;
   if (unlikely(!dir)) {
@@ -456,12 +456,16 @@ static int cinq_add_link_(struct dentry *dentry, struct inode *inode) {
       tag = tag_malloc_();
       if (unlikely(!tag)) wr_release_return(&child->ci_tags_lock, -ENOSPC);
       tag->t_fs = fs;
-      tag->t_inode = inode;
+      tag->t_inode = (void *)inode;
       tag->t_mode = CINQ_MERGE;
       cnode_add_tag_(child, tag);
     } else {
-      DEBUG_("[Warn@cinq_add_link_] link an existing entry: %s.\n", name);
-      return -EINVAL;
+      DEBUG_ON_(inode && tag->t_inode,
+                "[Warn@cinq_add_link_] re-link existing entry: %s.\n",
+                name); // otherwise, this deletes the link
+      tag->t_fs = fs;
+      tag->t_inode = (void *)inode; // should be null
+      tag->t_mode = CINQ_MERGE;
     }
     write_unlock(&child->ci_tags_lock);
     
@@ -472,7 +476,7 @@ static int cinq_add_link_(struct dentry *dentry, struct inode *inode) {
     tag = tag_malloc_();
     if (unlikely(!tag)) wr_release_return(&parent->ci_children_lock, -ENOSPC);
     tag->t_fs = fs;
-    tag->t_inode = inode;
+    tag->t_inode = (void *)inode;
     tag->t_mode = CINQ_MERGE;
     cnode_add_tag_(child, tag);
     cnode_add_child_(parent, child);
@@ -482,7 +486,7 @@ static int cinq_add_link_(struct dentry *dentry, struct inode *inode) {
     journal_cnode(parent, UPDATE);
   }
 
-  if (i_tag(dir)->t_fs != fs) {
+  if (i_tag(dir)->t_fs != fs && inode) {
     cnode_tag_parents_(tag->t_inode, fs);
   }
   return 0;
@@ -514,11 +518,18 @@ int cinq_link(struct dentry *old_dentry, struct inode *dir,
 
 int cinq_unlink(struct inode *dir, struct dentry *dentry) {
   struct inode *inode = dentry->d_inode;
+  if (unlikely(!inode)) {
+    DEBUG_("[Error@cinq_unlink] unlink invalid dentry without inode: %s.\n",
+           dentry->d_name.name);
+    return -EINVAL;
+  }
   
-  inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
-  drop_nlink(inode);
-  dput(dentry);
-  return 0;
+  int err = cinq_add_link_(dentry, NULL);
+  if (!err) {
+    inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
+    iput(inode);
+  }
+  return err;
 }
 
 int cinq_symlink(struct inode *dir, struct dentry *dentry,

@@ -255,8 +255,9 @@ static void *rand_lookup_(void *droot) {
 static spinlock_t create_link_num_lock_;
 static int create_num_ok_ = 0;
 static int link_num_ok_ = 0;
+static int unlink_num_ok_ = 0;
 
-// Includes example for invoking cinq_create, cinq_link
+// Includes example for invoking cinq_create, cinq_link, cinq_unlink
 static void *rand_create_link_(void *droot) {
   // randomly choose client file system
   char fs_name[MAX_NAME_LEN + 1];
@@ -267,8 +268,7 @@ static void *rand_create_link_(void *droot) {
   
   const int k_num_seg = 4;
   char dir[k_num_seg][MAX_NAME_LEN + 1];
-  int num_create_ok = 0;
-  int num_link_ok = 0;
+  int num_create_ok = 0, num_link_ok = 0, num_unlink_ok = 0;
   int i;
   for (i = 0; i < NUM_CREATE_; ++i) {
     // manually fills dir segments
@@ -295,12 +295,12 @@ static void *rand_create_link_(void *droot) {
       continue;
     }
     
-    // Example for invoking cinq_create
+    /* Example for invoking cinq_create */
     struct inode *container = found_dent->d_inode;
     int mode = (CINQ_MERGE << CINQ_MODE_SHIFT) | S_IFREG;
     char file_name[MAX_NAME_LEN + 1];
     sprintf(file_name, "%d", rand());
-    struct qstr q_file_name =
+    const struct qstr q_file_name =
         { .name = (unsigned char *)file_name, .len = strlen(file_name) };
     struct dentry *file_dent = d_alloc(found_dent, &q_file_name);
     // The fsnode can be determined by various ways.
@@ -314,11 +314,11 @@ static void *rand_create_link_(void *droot) {
       continue;
     } 
     
-    // Example for invoking cinq_link
+    /* Example for invoking cinq_link */
     // reuse container and file_dent
     char link_name[MAX_NAME_LEN + 1];
     sprintf(link_name, "__%s", file_name); // adds some prefix to denote link
-    struct qstr q_link_name =
+    const struct qstr q_link_name =
         { .name = (unsigned char *)link_name, .len = strlen(link_name) };
     struct dentry *link_dent = d_alloc(found_dent, &q_link_name);
     link_dent->d_fsdata = req_fs;
@@ -330,7 +330,7 @@ static void *rand_create_link_(void *droot) {
     }
     
     // repeat lookup to check
-    // the following is only for test purpose
+    // the following part is only for test purpose
     int pass = 1;
     char dir_file[k_num_seg + 1][MAX_NAME_LEN + 1];
     memcpy(dir_file, dir, sizeof(dir));
@@ -359,10 +359,35 @@ static void *rand_create_link_(void *droot) {
             found_dent_2 ? i_cnode(found_dent_2->d_parent->d_inode)->ci_name : "-",
             pass ? "OK" : "WRONG");
     if (pass) ++num_link_ok;
+    
+    /* Example for invoking cinq_unlink */
+    if (container->i_op->unlink(container, file_dent)) {
+      DEBUG_("[Error@rand_create_link_] failed to unlink %s@%s.\n",
+             file_name, i_cnode(container)->ci_name);
+      continue;
+    }
+    // the following part is only for test purpose
+    pass = 1;
+    sprintf(dir_file[k_num_seg], "%s", file_name);
+    found_dent = do_lookup_(droot, (void *)dir_file, k_num_seg + 1);
+    if (found_dent) { // the unlinked file should be gone
+      pass = 0;
+    }
+    sprintf(dir_file[k_num_seg], "__%s", file_name);
+    found_dent = do_lookup_(droot, (void *)dir_file, k_num_seg + 1);
+    if (!found_dent || found_dent->d_inode != found_dent_2->d_inode) {
+      pass = 0; // the other linked file should exist
+    }
+    fprintf(stdout, "rand_unlink_: %s@%s\t%s\n",
+            dir_file[k_num_seg], dir_file[k_num_seg - 1],
+            pass ? "OK" : "WRONG");
+    if (pass) ++num_unlink_ok;
+    
   } // for
   spin_lock(&create_link_num_lock_);
   create_num_ok_ += num_create_ok;
   link_num_ok_ += num_link_ok;
+  unlink_num_ok_ += num_unlink_ok;
   spin_unlock(&create_link_num_lock_);
   pthread_exit(NULL);
 }
@@ -470,6 +495,9 @@ int main(int argc, const char * argv[]) {
   fprintf(stdout, "link: %d/%d checked OK [%s].\n",
           link_num_ok_, expected_num,
           link_num_ok_ < expected_num ? "NOT PASSED" : "PASSED");
+  fprintf(stdout, "unlink: %d/%d checked OK [%s].\n",
+          unlink_num_ok_, expected_num,
+          unlink_num_ok_ < expected_num ? "NOT PASSED" : "PASSED");
   
   int final_inode_num = atomic_read(&num_inodes_);
   fprintf(stdout, "inode leak test: %d -> %d\t[%s].\n",
