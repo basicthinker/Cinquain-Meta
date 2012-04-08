@@ -88,15 +88,15 @@ THREAD_FUNC_(journal_writeback)(void *data) {
       int key_size = sizeof(entry->key);
       switch (entry->action) {
         case CREATE:
-          fprintf(stdout, "journal (%d)\t- CREATE key %lx(%d).\n",
+          fprintf(stderr, "journal (%d)\t- CREATE key %lx(%d).\n",
                   ++num, *((unsigned long *)entry->key), key_size);
           break;
         case UPDATE:
-          fprintf(stdout, "journal (%d)\t- UPDATE key %lx(%d).\n",
+          fprintf(stderr, "journal (%d)\t- UPDATE key %lx(%d).\n",
                   ++num, *((unsigned long *)entry->key), key_size);
           break;
         case DELETE:
-          fprintf(stdout, "journal (%d)\t- UPDATE key %lx(%d).\n",
+          fprintf(stderr, "journal (%d)\t- UPDATE key %lx(%d).\n",
                   ++num, *((unsigned long *)entry->key), key_size);
           break;
         default:
