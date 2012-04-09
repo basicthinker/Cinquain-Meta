@@ -256,8 +256,10 @@ static spinlock_t create_link_num_lock_;
 static int create_num_ok_ = 0;
 static int link_num_ok_ = 0;
 static int unlink_num_ok_ = 0;
+static int rmdir_num_ok_ = 0;
 
-// Includes example for invoking cinq_create, cinq_link, cinq_unlink
+// Includes example for invoking:
+// cinq_create, cinq_link, cinq_unlink, cinq_rmdir
 static void *rand_create_link_(void *droot) {
   // randomly choose client file system
   char fs_name[MAX_NAME_LEN + 1];
@@ -268,7 +270,8 @@ static void *rand_create_link_(void *droot) {
   
   const int k_num_seg = 4;
   char dir[k_num_seg][MAX_NAME_LEN + 1];
-  int num_create_ok = 0, num_link_ok = 0, num_unlink_ok = 0;
+  int num_create_ok = 0, num_link_ok = 0;
+  int num_unlink_ok = 0, num_rmdir_ok = 0;
   int i;
   for (i = 0; i < NUM_CREATE_; ++i) {
     // manually fills dir segments
@@ -289,28 +292,28 @@ static void *rand_create_link_(void *droot) {
     // Omits dcache lookup.
     // Dentry cache should be firstly used in practice.
     
-    struct dentry *found_dent = do_lookup_(droot, (void *)dir, k_num_seg);
-    if (!found_dent || strcmp(fs_name, d_fs(found_dent)->fs_name) == 0) {
+    struct dentry* const dir_dent = do_lookup_(droot, (void *)dir, k_num_seg);
+    if (!dir_dent || strcmp(fs_name, d_fs(dir_dent)->fs_name) == 0) {
       --i;
       continue;
     }
     
     /* Example for invoking cinq_create */
-    struct inode *container = found_dent->d_inode;
+    struct inode *dir_inode = dir_dent->d_inode;
     int mode = (CINQ_MERGE << CINQ_MODE_SHIFT) | S_IFREG;
     char file_name[MAX_NAME_LEN + 1];
     sprintf(file_name, "%d", rand());
     const struct qstr q_file_name =
         { .name = (unsigned char *)file_name, .len = strlen(file_name) };
-    struct dentry *file_dent = d_alloc(found_dent, &q_file_name);
+    struct dentry* const file_dent = d_alloc(dir_dent, &q_file_name);
     // The fsnode can be determined by various ways.
     // Note that this is who takes the operation,
     // NOT always be d_fs(found_dent) who can be an ancestor.
     file_dent->d_fsdata = req_fs;
     
-    if (container->i_op->create(container, file_dent, mode, NULL)) {
+    if (dir_inode->i_op->create(dir_inode, file_dent, mode, NULL)) {
       DEBUG_("[Error@rand_create_link_] failed to create %s@%s.\n",
-             file_name, i_cnode(container)->ci_name);
+             file_name, i_cnode(dir_inode)->ci_name);
       continue;
     } 
     
@@ -320,12 +323,12 @@ static void *rand_create_link_(void *droot) {
     sprintf(link_name, "__%s", file_name); // adds some prefix to denote link
     const struct qstr q_link_name =
         { .name = (unsigned char *)link_name, .len = strlen(link_name) };
-    struct dentry *link_dent = d_alloc(found_dent, &q_link_name);
+    struct dentry* const link_dent = d_alloc(dir_dent, &q_link_name);
     link_dent->d_fsdata = req_fs;
     
-    if (container->i_op->link(file_dent, container, link_dent)) {
+    if (dir_inode->i_op->link(file_dent, dir_inode, link_dent)) {
       DEBUG_("[Error@rand_create_link_] failed to link to %s@%s.\n",
-             file_name, i_cnode(container)->ci_name);
+             file_name, i_cnode(dir_inode)->ci_name);
       continue;
     }
     
@@ -334,60 +337,81 @@ static void *rand_create_link_(void *droot) {
     int pass = 1;
     char dir_file[k_num_seg + 1][MAX_NAME_LEN + 1];
     memcpy(dir_file, dir, sizeof(dir));
-    strncpy(dir_file[k_num_seg], file_name, q_file_name.len + 1);
-    found_dent = do_lookup_(droot, (void *)dir_file, k_num_seg + 1);
-    if (!found_dent || d_fs(found_dent) != req_fs) {
+    sprintf(dir_file[k_num_seg], "%s", file_name);
+    struct dentry *d_file = do_lookup_(droot, (void *)dir_file, k_num_seg + 1);
+    if (!d_file || d_fs(d_file) != req_fs) {
       pass = 0;
     }
     fprintf(stdout, "rand_create_: %s(%s) -> %s(%s)\t%s\n",
             dir[k_num_seg - 1], fs_name,
-            file_name, found_dent ? d_fs(found_dent)->fs_name : "-",
+            file_name, d_file ? d_fs(d_file)->fs_name : "-",
             pass ? "OK" : "WRONG");
     if (pass) ++num_create_ok;
     else continue;
     
     pass = 1;
     sprintf(dir_file[k_num_seg], "__%s", file_name);
-    struct dentry *found_dent_2 = do_lookup_(droot, (void *)dir_file,
-                                             k_num_seg + 1);
-    if (!found_dent_2 || found_dent->d_inode != found_dent_2->d_inode) {
+    struct dentry *d_link = do_lookup_(droot, (void *)dir_file, k_num_seg + 1);
+    if (!d_link || d_file->d_inode != d_link->d_inode) {
       pass = 0;
     }
     fprintf(stdout, "rand_link_: %s@%s -> %s@%s\t%s\n",
             dir_file[k_num_seg], dir_file[k_num_seg - 1],
-            found_dent_2 ? i_cnode(found_dent_2->d_inode)->ci_name : "-",
-            found_dent_2 ? i_cnode(found_dent_2->d_parent->d_inode)->ci_name : "-",
+            d_link ? i_cnode(d_link->d_inode)->ci_name : "-",
+            d_link ? i_cnode(d_link->d_parent->d_inode)->ci_name : "-",
             pass ? "OK" : "WRONG");
     if (pass) ++num_link_ok;
     
     /* Example for invoking cinq_unlink */
-    if (container->i_op->unlink(container, file_dent)) {
+    if (dir_inode->i_op->unlink(dir_inode, file_dent)) {
       DEBUG_("[Error@rand_create_link_] failed to unlink %s@%s.\n",
-             file_name, i_cnode(container)->ci_name);
+             file_name, i_cnode(dir_inode)->ci_name);
       continue;
     }
     // the following part is only for test purpose
     pass = 1;
-    sprintf(dir_file[k_num_seg], "%s", file_name);
-    found_dent = do_lookup_(droot, (void *)dir_file, k_num_seg + 1);
-    if (found_dent) { // the unlinked file should be gone
-      pass = 0;
-    }
     sprintf(dir_file[k_num_seg], "__%s", file_name);
-    found_dent = do_lookup_(droot, (void *)dir_file, k_num_seg + 1);
-    if (!found_dent || found_dent->d_inode != found_dent_2->d_inode) {
-      pass = 0; // the other linked file should exist
+    d_file = do_lookup_(droot, (void *)dir_file, k_num_seg + 1);
+    if (!d_file || d_file->d_inode != d_link->d_inode) {
+      pass = 0; // the linked file should exist
+    }
+    sprintf(dir_file[k_num_seg], "%s", file_name);
+    d_file = do_lookup_(droot, (void *)dir_file, k_num_seg + 1);
+    if (d_file) { // the unlinked file should be gone
+      pass = 0;
     }
     fprintf(stdout, "rand_unlink_: %s@%s\t%s\n",
             dir_file[k_num_seg], dir_file[k_num_seg - 1],
             pass ? "OK" : "WRONG");
     if (pass) ++num_unlink_ok;
     
+    /* Example for invoking cinq_rmdir */
+    struct inode *i_parent = dir_dent->d_parent->d_inode;
+    if (i_parent->i_op->rmdir(i_parent, dir_dent) != -ENOTEMPTY) {
+      DEBUG_("[Error@rand_create_link_] removed non-emtpy dir: %s\n",
+             i_cnode(dir_inode)->ci_name);
+      continue;
+    }
+    if (dir_inode->i_op->unlink(dir_inode, link_dent)) {
+      DEBUG_("[Error@rand_create_link_] failed to delete link file: %s@%s\n",
+             link_dent->d_name.name, i_cnode(dir_inode)->ci_name);
+      continue;
+    }
+    if (i_parent->i_op->rmdir(i_parent, dir_dent)) {
+      DEBUG_("[Error@rand_create_link_] failed to remove dir: %s\n",
+             i_cnode(dir_inode)->ci_name);
+      continue;
+    }
+    fprintf(stdout, "rand_rmdir_: %s\tOK\n",
+            dir_file[k_num_seg - 1]);
+    ++num_rmdir_ok;
+    
   } // for
   spin_lock(&create_link_num_lock_);
   create_num_ok_ += num_create_ok;
   link_num_ok_ += num_link_ok;
   unlink_num_ok_ += num_unlink_ok;
+  rmdir_num_ok_ += num_rmdir_ok;
   spin_unlock(&create_link_num_lock_);
   pthread_exit(NULL);
 }
@@ -498,6 +522,9 @@ int main(int argc, const char * argv[]) {
   fprintf(stdout, "unlink: %d/%d checked OK [%s].\n",
           unlink_num_ok_, expected_num,
           unlink_num_ok_ < expected_num ? "NOT PASSED" : "PASSED");
+  fprintf(stdout, "rmdir: %d/%d checked OK [%s].\n",
+          rmdir_num_ok_, expected_num,
+          rmdir_num_ok_ < expected_num ? "NOT PASSED" : "PASSED");
   
   int final_inode_num = atomic_read(&num_inodes_);
   fprintf(stdout, "inode leak test: %d -> %d\t[%s].\n",

@@ -114,11 +114,20 @@ struct cinq_tag {
   struct cinq_inode *t_host; // who holds the hash table this tag belongs to
   struct inode *t_inode; // whose i_no points to this tag
 
+  atomic_t t_nchild;
   enum cinq_inherit_type t_mode;
   unsigned char t_file_handle[FILE_HASH_WIDTH];
 
   UT_hash_handle hh; // default handle name
 };
+
+static inline void inc_nchild_(struct cinq_tag *tag) {
+  atomic_inc(&tag->t_nchild);
+}
+
+static inline void drop_nchild_(struct cinq_tag *tag) {
+  atomic_dec(&tag->t_nchild);
+}
 
 static inline struct cinq_tag *i_tag(const struct inode *inode) {
   return (struct cinq_tag *)inode->i_ino;
