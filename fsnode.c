@@ -16,7 +16,7 @@
 // Used to prevent cyclic path in tree.
 static inline int fsnode_ancestor_(struct cinq_fsnode *ancestor,
                                   struct cinq_fsnode *descendant) {
-  while (!fsnode_is_root(descendant)) {
+  while (descendant->fs_parent) {
     descendant = descendant->fs_parent;
     if (descendant == ancestor) return 1;
   }
@@ -31,11 +31,7 @@ struct cinq_fsnode *fsnode_new(const char *name, struct cinq_fsnode *parent) {
            "[Error@cnode_new] conversion fails: fs_id %lx != fsnode %p",
            fsnode->fs_id, fsnode);
   strncpy(fsnode->fs_name, name, MAX_NAME_LEN);
-  if (parent) {
-    fsnode->fs_parent = parent;
-  } else {
-    fsnode->fs_parent = fsnode; // denotes root
-  }
+  fsnode->fs_parent = parent;
   fsnode->fs_root = NULL; // filled after registeration
   fsnode->fs_children = NULL; // required by uthash
   rwlock_init(&fsnode->fs_children_lock);
@@ -68,7 +64,7 @@ void fsnode_evict(struct cinq_fsnode *fsnode) {
   
   cfs_rm_syn(&file_systems, fsnode);
   
-  if (!fsnode_is_root(fsnode) && fsnode->fs_parent) {
+  if (fsnode->fs_parent) {
     write_lock(&fsnode->fs_parent->fs_children_lock);
     HASH_DELETE(fs_child, fsnode->fs_parent->fs_children, fsnode);
     write_unlock(&fsnode->fs_parent->fs_children_lock);
@@ -89,9 +85,8 @@ void fsnode_evict_all(struct cinq_fsnode *fsnode) {
 void fsnode_move(struct cinq_fsnode *child,
                  struct cinq_fsnode *new_parent) {
   if (fsnode_ancestor_(child, new_parent)) {
-    DEBUG_("[Error@fsnode_change_parent] change fsnode %lx's parent "
-           "from %lx to %lx.\n",
-           child->fs_id, child->fs_parent->fs_id, new_parent->fs_id);
+    DEBUG_("[Error@fsnode_change_parent] change fsnode %s's parent to %s.\n",
+           child->fs_name, new_parent->fs_name);
     return;
   }
   write_lock(&child->fs_parent->fs_children_lock);

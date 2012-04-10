@@ -153,8 +153,8 @@ static void *make_dir_tree(void *fsnode) {
 
 // Example for invoking cinq_lookup
 static struct dentry *do_lookup_(struct dentry *droot,
-                                   char seg[][MAX_NAME_LEN + 1],
-                                   const int num) {
+                                 char seg[][MAX_NAME_LEN + 1],
+                                 const int num) {
   struct dentry *den = droot;           // (1) start from super_block.s_root
   struct inode *inode = den->d_inode;   //     and corresponding inode
   int i;
@@ -308,14 +308,14 @@ static void *rand_create_link_(void *droot) {
     struct dentry* const file_dent = d_alloc(dir_dent, &q_file_name);
     // The fsnode can be determined by various ways.
     // Note that this is who takes the operation,
-    // NOT always be d_fs(found_dent) who can be an ancestor.
+    // NOT always be d_fs(dir_dent) who can be an ancestor fs.
     file_dent->d_fsdata = req_fs;
     
     if (dir_inode->i_op->create(dir_inode, file_dent, mode, NULL)) {
       DEBUG_("[Error@rand_create_link_] failed to create %s@%s.\n",
              file_name, i_cnode(dir_inode)->ci_name);
       continue;
-    } 
+    }
     
     /* Example for invoking cinq_link */
     // reuse container and file_dent
@@ -331,7 +331,7 @@ static void *rand_create_link_(void *droot) {
              file_name, i_cnode(dir_inode)->ci_name);
       continue;
     }
-    
+
     // repeat lookup to check
     // the following part is only for test purpose
     int pass = 1;
@@ -342,9 +342,9 @@ static void *rand_create_link_(void *droot) {
     if (!d_file || d_fs(d_file) != req_fs) {
       pass = 0;
     }
-    fprintf(stdout, "rand_create_: %s(%s) -> %s(%s)\t%s\n",
-            dir[k_num_seg - 1], fs_name,
+    fprintf(stdout, "rand_create_: %s(%s)@%s(%s)\t%s\n",
             file_name, d_file ? d_fs(d_file)->fs_name : "-",
+            dir[k_num_seg - 1], fs_name,
             pass ? "OK" : "WRONG");
     if (pass) ++num_create_ok;
     else continue;
@@ -386,24 +386,24 @@ static void *rand_create_link_(void *droot) {
     if (pass) ++num_unlink_ok;
     
     /* Example for invoking cinq_rmdir */
+    pass = 0;
     struct inode *i_parent = dir_dent->d_parent->d_inode;
     if (i_parent->i_op->rmdir(i_parent, dir_dent) != -ENOTEMPTY) {
       DEBUG_("[Error@rand_create_link_] removed non-emtpy dir: %s\n",
              i_cnode(dir_inode)->ci_name);
       continue;
     }
-    if (dir_inode->i_op->unlink(dir_inode, link_dent)) {
+    if (dir_inode->i_op->unlink(dir_inode, link_dent)) { // make the dir empty
       DEBUG_("[Error@rand_create_link_] failed to delete link file: %s@%s\n",
              link_dent->d_name.name, i_cnode(dir_inode)->ci_name);
       continue;
     }
     if (i_parent->i_op->rmdir(i_parent, dir_dent)) {
-      DEBUG_("[Error@rand_create_link_] failed to remove dir: %s\n",
-             i_cnode(dir_inode)->ci_name);
+      DEBUG_("[Error@rand_create_link_] failed to rmdir: %s\n",
+             dir_dent->d_name.name);
       continue;
     }
-    fprintf(stdout, "rand_rmdir_: %s\tOK\n",
-            dir_file[k_num_seg - 1]);
+    fprintf(stdout, "rand_rmdir_: %s\tOK\n", dir_file[k_num_seg - 1]);
     ++num_rmdir_ok;
     
   } // for
@@ -508,28 +508,28 @@ int main(int argc, const char * argv[]) {
   
   // Show results
   int expected_num = NUM_LOOKUP_ * LOOKUP_THR_NUM_;
-  fprintf(stdout, "\nmkdir/lookup: %d/%d checked OK [%s].\n",
+  fprintf(stdout, "\nmkdir/lookup: %d/%d checked ok [%s].\n",
           lookup_num_ok_, expected_num,
-          lookup_num_ok_ < expected_num ? "NOT PASSED" : "PASSED");
+          lookup_num_ok_ < expected_num ? "NOT Passed" : "Passed");
   
   expected_num = NUM_CREATE_ * CREATE_THR_NUM_;
-  fprintf(stdout, "create: %d/%d checked OK [%s].\n",
+  fprintf(stdout, "create: %d/%d checked ok [%s].\n",
           create_num_ok_, expected_num,
-          create_num_ok_ < expected_num ? "NOT PASSED" : "PASSED");
-  fprintf(stdout, "link: %d/%d checked OK [%s].\n",
+          create_num_ok_ < expected_num ? "NOT Passed" : "Passed");
+  fprintf(stdout, "link: %d/%d checked ok [%s].\n",
           link_num_ok_, expected_num,
-          link_num_ok_ < expected_num ? "NOT PASSED" : "PASSED");
-  fprintf(stdout, "unlink: %d/%d checked OK [%s].\n",
+          link_num_ok_ < expected_num ? "NOT Passed" : "Passed");
+  fprintf(stdout, "unlink: %d/%d checked ok [%s].\n",
           unlink_num_ok_, expected_num,
-          unlink_num_ok_ < expected_num ? "NOT PASSED" : "PASSED");
-  fprintf(stdout, "rmdir: %d/%d checked OK [%s].\n",
+          unlink_num_ok_ < expected_num ? "NOT Passed" : "Passed");
+  fprintf(stdout, "rmdir: %d/%d checked ok [%s].\n",
           rmdir_num_ok_, expected_num,
-          rmdir_num_ok_ < expected_num ? "NOT PASSED" : "PASSED");
+          rmdir_num_ok_ < expected_num ? "NOT Passed" : "Passed");
   
   int final_inode_num = atomic_read(&num_inodes_);
   fprintf(stdout, "inode leak test: %d -> %d\t[%s].\n",
           max_inode_num, final_inode_num,
-          final_inode_num ? "NOT PASSED" : "PASSED");
+          final_inode_num ? "NOT Passed" : "Passed");
   
   return 0;
 }

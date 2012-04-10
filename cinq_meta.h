@@ -34,7 +34,7 @@ struct cinq_fsnode {
 };
 
 static inline int fsnode_is_root(const struct cinq_fsnode *fsnode) {
-  return fsnode->fs_parent == fsnode;
+  return fsnode->fs_parent == NULL;
 }
 
 /* fsnode.c */
@@ -141,6 +141,9 @@ static inline struct cinq_fsnode *d_fs(const struct dentry *dentry) {
   return i_tag(dentry->d_inode)->t_fs;
 }
 
+static inline int negtive(const struct cinq_tag *tag) {
+  return tag->t_inode == NULL;
+}
 
 struct cinq_inode {
   unsigned long ci_id;
@@ -163,6 +166,10 @@ static inline struct cinq_inode *i_cnode(const struct inode *inode) {
   return i_tag(inode)->t_host;
 }
 
+#define foreach_ancestor_tag(fs, tag, cnode) \
+    for (tag = cnode_find_tag_(cnode, fs); \
+         fs && (!tag || !negtive(tag)); \
+         fs = fs->fs_parent, tag = cnode_find_tag_(cnode, fs))
 
 /* super.c */
 
