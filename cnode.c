@@ -86,8 +86,21 @@ static inline void cnode_rm_tag_syn(struct cinq_inode *cnode,
   write_unlock(&cnode->ci_tags_lock);
 }
 
-static inline void tag_evict(struct cinq_tag *tag) {
+static inline void inc_nchild_(struct cinq_tag *tag) {
+  atomic_inc(&tag->t_nchild);
+}
+
+static inline void drop_nchild_(struct cinq_tag *tag) {
+  atomic_dec(&tag->t_nchild);
+}
+
+static inline void tag_drop_inode_(struct cinq_tag *tag) {
   iput(tag->t_inode);
+  tag->t_inode = NULL;
+}
+
+static inline void tag_evict(struct cinq_tag *tag) {
+  tag_drop_inode_(tag);
   cnode_rm_tag_syn(tag->t_host, tag);
   tag_free_(tag);
 }
@@ -248,6 +261,16 @@ static void cnode_tag_ancestors_(const struct inode *child,
   }
 }
 
+void cinq_destroy_inode(struct inode *inode) {
+  if (inode->i_nlink || atomic_read(&inode->i_count))
+    return;
+  inode_free_(inode);
+  
+#ifdef CINQ_DEBUG
+  atomic_dec(&num_inodes_);
+#endif // CINQ_DEBUG
+}
+
 struct inode *cnode_make_tree(struct super_block *sb) {
   struct cinq_inode *croot = cnode_new_("/");
   croot->ci_parent = croot;
@@ -269,7 +292,7 @@ struct inode *cnode_make_tree(struct super_block *sb) {
   return iroot;
 }
 
-static int cinq_mknod(struct inode *dir, struct dentry *dentry, int mode) {
+static int cinq_mknod_(struct inode *dir, struct dentry *dentry, int mode) {
   struct cinq_inode *parent = i_cnode(dir);
   struct cinq_inode *child;
   struct cinq_tag *tag;
@@ -346,7 +369,7 @@ int cinq_create(struct inode *dir, struct dentry *dentry,
     DEBUG_("[Error@cinq_create] no fsnode is specified.\n");
     return -EINVAL;
   }
-  return cinq_mknod(dir, dentry, mode | S_IFREG);
+  return cinq_mknod_(dir, dentry, mode | S_IFREG);
 }
 
 int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
@@ -374,7 +397,7 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
     return 0;
   }
 
-  int err = cinq_mknod(dir, dentry, mode | S_IFDIR);
+  int err = cinq_mknod_(dir, dentry, mode | S_IFDIR);
   if (!err) {
      inc_nlink(dir);
   }
@@ -535,7 +558,7 @@ int cinq_unlink(struct inode *dir, struct dentry *dentry) {
     if (unlikely(!tag)) wr_release_return(&cnode->ci_tags_lock, -ENOSPC);
     cnode_add_tag_(cnode, tag);
   } else {
-    tag->t_inode = NULL;
+    tag_drop_inode_(tag);
     has_parent_tag = 1;
   }
   write_unlock(&cnode->ci_tags_lock);
@@ -550,7 +573,6 @@ int cinq_unlink(struct inode *dir, struct dentry *dentry) {
   }
   
   inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
-  iput(inode);
   return 0;
 }
 

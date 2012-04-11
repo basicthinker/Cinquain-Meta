@@ -24,6 +24,7 @@ struct cinq_fsnode {
   char fs_name[MAX_NAME_LEN + 1];
   struct cinq_fsnode *fs_parent;
   struct dentry *fs_root;
+  spinlock_t lock; // used for fs holders
   
   // Using hash table to store children
   struct cinq_fsnode *fs_children;
@@ -120,14 +121,6 @@ struct cinq_tag {
 
   UT_hash_handle hh; // default handle name
 };
-
-static inline void inc_nchild_(struct cinq_tag *tag) {
-  atomic_inc(&tag->t_nchild);
-}
-
-static inline void drop_nchild_(struct cinq_tag *tag) {
-  atomic_dec(&tag->t_nchild);
-}
 
 static inline struct cinq_tag *i_tag(const struct inode *inode) {
   return (struct cinq_tag *)inode->i_ino;
@@ -230,6 +223,8 @@ extern int cinq_rmdir(struct inode *dir, struct dentry *dentry);
 extern int cinq_rename(struct inode *old_dir, struct dentry *old_dentry,
                 struct inode *new_dir, struct dentry *new_dentry);
 extern int cinq_setattr(struct dentry *dentry, struct iattr *attr);
+
+extern void cinq_destroy_inode(struct inode *inode);
 
 // @dentry: contains cinq_fsnode.fs_id in its d_fsdata, which specifies
 //    the file system to take the operation.

@@ -245,18 +245,9 @@ static inline struct inode *alloc_inode_(struct super_block *sb)
   //  i_size_ordered_init(inode);
   
 	if (inode_init_always_(sb, inode)) {
-		if (inode->i_sb->s_op->destroy_inode)
-			inode->i_sb->s_op->destroy_inode(inode);
-		else
-			free(inode); // adjusted for user space
-
-#ifdef CINQ_DEBUG
-    atomic_dec(&num_inodes_);
-#endif // CINQ_DEBUG
-    
+		inode->i_sb->s_op->destroy_inode(inode); // adjusted
 		return NULL;
 	}
-  
 	return inode;
 }
 

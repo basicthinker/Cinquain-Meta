@@ -60,6 +60,8 @@ atomic_t num_inodes_;
 #define DEBUG_(...) (fprintf(stderr, __VA_ARGS__))
 #endif // CINQ_DEBUG
 
+#define inode_free_(p) (free(p))
+
 #define fsnode_malloc_() \
     ((struct cinq_fsnode *)malloc(sizeof(struct cinq_fsnode)))
 #define fsnode_free_(p) (free(p))
@@ -104,7 +106,6 @@ typedef long long loff_t;
 typedef pthread_rwlock_t rwlock_t;
 #define RW_LOCK_UNLOCKED PTHREAD_RWLOCK_INITIALIZER
 #define rwlock_init(lock_p) (pthread_rwlock_init(lock_p, NULL))
-// #define rwlock_destroy(lock_p) (pthread_rwlock_destroy(lock_p));
 #define read_lock(lock_p) (pthread_rwlock_rdlock(lock_p))
 #define read_unlock(lock_p) (pthread_rwlock_unlock(lock_p))
 #define write_lock(lock_p) (pthread_rwlock_wrlock(lock_p))
@@ -113,8 +114,8 @@ typedef pthread_rwlock_t rwlock_t;
 typedef pthread_mutex_t spinlock_t;
 #define SPIN_LOCK_UNLOCKED PTHREAD_MUTEX_INITIALIZER
 #define spin_lock_init(lock_p) (pthread_mutex_init(lock_p, NULL))
-// #define spin_lock_destroy(lock_p) (pthread_mutex_destroy(lock_p))
 #define spin_lock(lock_p) (pthread_mutex_lock(lock_p))
+#define spin_trylock(lock_p) (pthread_mutex_trylock(lock_p))
 #define spin_unlock(lock_p) (pthread_mutex_unlock(lock_p))
 
 #define rd_release_return(lock_p, err) return (read_unlock(lock_p), err)

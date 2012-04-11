@@ -553,14 +553,8 @@ static inline void inode_init_owner(struct inode *inode, const struct inode *dir
 static inline void destroy_inode(struct inode *inode) {
   // BUG_ON(!list_empty(&inode->i_lru));
   // __destroy_inode(inode);
-  if (inode->i_sb->s_op->destroy_inode)
-    inode->i_sb->s_op->destroy_inode(inode);
-  else
-    // call_rcu(&inode->i_rcu, i_callback);
-    free(inode);
-#ifdef CINQ_DEBUG
-  atomic_dec(&num_inodes_);
-#endif // CINQ_DEBUG
+  inode->i_sb->s_op->destroy_inode(inode);
+  // call_rcu(&inode->i_rcu, i_callback);
 }
 
 /**

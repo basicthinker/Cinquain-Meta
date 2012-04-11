@@ -19,9 +19,9 @@
 #define CNODE_CHILDREN_ 5 // should be larger than FS_CHILDREN_
 
 #define NUM_LOOKUP_ 50
-#define LOOKUP_THR_NUM_ 5 // number of threads for rand_lookup
+#define LOOKUP_THR_NUM_ 8 // number of threads for rand_lookup
 #define NUM_CREATE_ 10
-#define CREATE_THR_NUM_ 5
+#define CREATE_THR_NUM_ 8
 
 static void print_fs_tree_(const int depth, const int no,
                           struct cinq_fsnode *root) {
@@ -260,7 +260,7 @@ static int rmdir_num_ok_ = 0;
 
 // Includes example for invoking:
 // cinq_create, cinq_link, cinq_unlink, cinq_rmdir
-static void *rand_create_link_(void *droot) {
+static void *rand_create_ln_rm_(void *droot) {
   // randomly choose client file system
   char fs_name[MAX_NAME_LEN + 1];
   const int fs_j = rand() % FS_CHILDREN_ + 1;
@@ -312,7 +312,7 @@ static void *rand_create_link_(void *droot) {
     file_dent->d_fsdata = req_fs;
     
     if (dir_inode->i_op->create(dir_inode, file_dent, mode, NULL)) {
-      DEBUG_("[Error@rand_create_link_] failed to create %s@%s.\n",
+      DEBUG_("[Error@rand_create_ln_rm_] failed to create %s@%s.\n",
              file_name, i_cnode(dir_inode)->ci_name);
       continue;
     }
@@ -327,12 +327,12 @@ static void *rand_create_link_(void *droot) {
     link_dent->d_fsdata = req_fs;
     
     if (dir_inode->i_op->link(file_dent, dir_inode, link_dent)) {
-      DEBUG_("[Error@rand_create_link_] failed to link to %s@%s.\n",
+      DEBUG_("[Error@rand_create_ln_rm_] failed to link to %s@%s.\n",
              file_name, i_cnode(dir_inode)->ci_name);
       continue;
     }
 
-    // repeat lookup to check
+    // repeat lookup to check create and link
     // the following part is only for test purpose
     int pass = 1;
     char dir_file[k_num_seg + 1][MAX_NAME_LEN + 1];
@@ -364,7 +364,7 @@ static void *rand_create_link_(void *droot) {
     
     /* Example for invoking cinq_unlink */
     if (dir_inode->i_op->unlink(dir_inode, file_dent)) {
-      DEBUG_("[Error@rand_create_link_] failed to unlink %s@%s.\n",
+      DEBUG_("[Error@rand_create_ln_rm_] failed to unlink %s@%s.\n",
              file_name, i_cnode(dir_inode)->ci_name);
       continue;
     }
@@ -389,17 +389,17 @@ static void *rand_create_link_(void *droot) {
     pass = 0;
     struct inode *i_parent = dir_dent->d_parent->d_inode;
     if (i_parent->i_op->rmdir(i_parent, dir_dent) != -ENOTEMPTY) {
-      DEBUG_("[Error@rand_create_link_] removed non-emtpy dir: %s\n",
+      DEBUG_("[Error@rand_create_ln_rm_] removed non-emtpy dir: %s\n",
              i_cnode(dir_inode)->ci_name);
       continue;
     }
     if (dir_inode->i_op->unlink(dir_inode, link_dent)) { // make the dir empty
-      DEBUG_("[Error@rand_create_link_] failed to delete link file: %s@%s\n",
+      DEBUG_("[Error@rand_create_ln_rm_] failed to delete link file: %s@%s\n",
              link_dent->d_name.name, i_cnode(dir_inode)->ci_name);
       continue;
     }
     if (i_parent->i_op->rmdir(i_parent, dir_dent)) {
-      DEBUG_("[Error@rand_create_link_] failed to rmdir: %s\n",
+      DEBUG_("[Error@rand_create_ln_rm_] failed to rmdir: %s\n",
              dir_dent->d_name.name);
       continue;
     }
@@ -407,6 +407,7 @@ static void *rand_create_link_(void *droot) {
     ++num_rmdir_ok;
     
   } // for
+  
   spin_lock(&create_link_num_lock_);
   create_num_ok_ += num_create_ok;
   link_num_ok_ += num_link_ok;
@@ -492,7 +493,7 @@ int main(int argc, const char * argv[]) {
   pthread_t create_thr[CREATE_THR_NUM_];
   memset(create_thr, 0, sizeof(create_thr));
   for (ti = 0; ti < CREATE_THR_NUM_; ++ti) {
-    err = pthread_create(&create_thr[ti], NULL, rand_create_link_, droot);
+    err = pthread_create(&create_thr[ti], NULL, rand_create_ln_rm_, droot);
     DEBUG_ON_(err, "[Error@main] error code of pthread_create: %d.\n", err);
   }
   for (ti = 0; ti < CREATE_THR_NUM_; ++ti) {
