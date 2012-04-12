@@ -21,7 +21,7 @@
 #define NUM_LOOKUP_ 50
 #define LOOKUP_THR_NUM_ 8 // number of threads for rand_lookup
 #define NUM_CREATE_ 10
-#define CREATE_THR_NUM_ 8
+#define CREATE_THR_NUM_ 8 // number of threads for rand_creat_ln_rm
 
 static void print_fs_tree_(const int depth, const int no,
                           struct cinq_fsnode *root) {
@@ -182,10 +182,10 @@ static struct dentry *do_lookup_(struct dentry *droot,
 }
 
 static spinlock_t lookup_num_lock_;
-static int lookup_num_ok_ = 0;
+static int lookup_ok_cnt = 0;
 
 // Includes example for invoking cinq_create
-static void *rand_lookup_(void *droot) {
+static void *rand_lookup(void *droot) {
   // randomly choose client file system
   char fs_name[MAX_NAME_LEN + 1];
   const int fs_j = rand() % FS_CHILDREN_ + 1;
@@ -247,20 +247,21 @@ static void *rand_lookup_(void *droot) {
     if (pass) ++num_ok;
   } // for
   spin_lock(&lookup_num_lock_);
-  lookup_num_ok_ += num_ok;
+  lookup_ok_cnt += num_ok;
   spin_unlock(&lookup_num_lock_);
   pthread_exit(NULL);
 }
 
-static spinlock_t create_link_num_lock_;
-static int create_num_ok_ = 0;
-static int link_num_ok_ = 0;
-static int unlink_num_ok_ = 0;
-static int rmdir_num_ok_ = 0;
+static spinlock_t create_ln_rm_lock_;
+static int create_test_cnt = 0;
+static int create_ok_cnt = 0;
+static int ln_ok_cnt = 0;
+static int unlink_ok_cnt = 0;
+static int rm_ok_cnt = 0;
 
 // Includes example for invoking:
 // cinq_create, cinq_link, cinq_unlink, cinq_rmdir
-static void *rand_create_ln_rm_(void *droot) {
+static void *rand_create_ln_rm(void *droot) {
   // randomly choose client file system
   char fs_name[MAX_NAME_LEN + 1];
   const int fs_j = rand() % FS_CHILDREN_ + 1;
@@ -270,8 +271,8 @@ static void *rand_create_ln_rm_(void *droot) {
   
   const int k_num_seg = 4;
   char dir[k_num_seg][MAX_NAME_LEN + 1];
-  int num_create_ok = 0, num_link_ok = 0;
-  int num_unlink_ok = 0, num_rmdir_ok = 0;
+  int num_create_test = 0, num_create_ok = 0;
+  int num_link_ok = 0, num_unlink_ok = 0, num_rmdir_ok = 0;
   int i;
   for (i = 0; i < NUM_CREATE_; ++i) {
     // manually fills dir segments
@@ -279,10 +280,8 @@ static void *rand_create_ln_rm_(void *droot) {
     const int dir_i = rand() % CNODE_CHILDREN_;
     const int dir_j = rand() % CNODE_CHILDREN_;
     const int dir_k = rand() % CNODE_CHILDREN_;
-    if (fs_j <= dir_j && fs_k <= dir_k) {
-      --i;
-      continue;
-    }    
+    if (fs_j <= dir_j && fs_k <= dir_k) continue;
+    
     // lookup path "/fs_name/dir[1]/dir[2]/dir[3]"
     sprintf(dir[0], "%s", fs_name); // the first segment is special
     sprintf(dir[1], "%x", dir_i);   // the rest are normal ones under root
@@ -293,13 +292,13 @@ static void *rand_create_ln_rm_(void *droot) {
     // Dentry cache should be firstly used in practice.
     
     struct dentry* const dir_dent = do_lookup_(droot, (void *)dir, k_num_seg);
-    if (!dir_dent || strcmp(fs_name, d_fs(dir_dent)->fs_name) == 0) {
-      --i;
+    if (!dir_dent || strcmp(fs_name, d_fs(dir_dent)->fs_name) == 0)
       continue;
-    }
+    
+    ++num_create_test;
     
     /* Example for invoking cinq_create */
-    struct inode *dir_inode = dir_dent->d_inode;
+    struct inode* const dir_inode = dir_dent->d_inode;
     int mode = (CINQ_MERGE << CINQ_MODE_SHIFT) | S_IFREG;
     char file_name[MAX_NAME_LEN + 1];
     sprintf(file_name, "%d", rand());
@@ -312,7 +311,7 @@ static void *rand_create_ln_rm_(void *droot) {
     file_dent->d_fsdata = req_fs;
     
     if (dir_inode->i_op->create(dir_inode, file_dent, mode, NULL)) {
-      DEBUG_("[Error@rand_create_ln_rm_] failed to create %s@%s.\n",
+      DEBUG_("[Error@rand_create_ln_rm] failed to create %s@%s.\n",
              file_name, i_cnode(dir_inode)->ci_name);
       continue;
     }
@@ -327,7 +326,7 @@ static void *rand_create_ln_rm_(void *droot) {
     link_dent->d_fsdata = req_fs;
     
     if (dir_inode->i_op->link(file_dent, dir_inode, link_dent)) {
-      DEBUG_("[Error@rand_create_ln_rm_] failed to link to %s@%s.\n",
+      DEBUG_("[Error@rand_create_ln_rm] failed to link to %s@%s.\n",
              file_name, i_cnode(dir_inode)->ci_name);
       continue;
     }
@@ -342,7 +341,7 @@ static void *rand_create_ln_rm_(void *droot) {
     if (!d_file || d_fs(d_file) != req_fs) {
       pass = 0;
     }
-    fprintf(stdout, "rand_create_: %s(%s)@%s(%s)\t%s\n",
+    fprintf(stdout, "cinq_create: %s(%s)@%s(%s)\t%s\n",
             file_name, d_file ? d_fs(d_file)->fs_name : "-",
             dir[k_num_seg - 1], fs_name,
             pass ? "OK" : "WRONG");
@@ -355,7 +354,7 @@ static void *rand_create_ln_rm_(void *droot) {
     if (!d_link || d_file->d_inode != d_link->d_inode) {
       pass = 0;
     }
-    fprintf(stdout, "rand_link_: %s@%s -> %s@%s\t%s\n",
+    fprintf(stdout, "cinq_link: %s@%s -> %s@%s\t%s\n",
             dir_file[k_num_seg], dir_file[k_num_seg - 1],
             d_link ? i_cnode(d_link->d_inode)->ci_name : "-",
             d_link ? i_cnode(d_link->d_parent->d_inode)->ci_name : "-",
@@ -364,7 +363,7 @@ static void *rand_create_ln_rm_(void *droot) {
     
     /* Example for invoking cinq_unlink */
     if (dir_inode->i_op->unlink(dir_inode, file_dent)) {
-      DEBUG_("[Error@rand_create_ln_rm_] failed to unlink %s@%s.\n",
+      DEBUG_("[Error@rand_create_ln_rm] failed to unlink %s@%s.\n",
              file_name, i_cnode(dir_inode)->ci_name);
       continue;
     }
@@ -380,7 +379,7 @@ static void *rand_create_ln_rm_(void *droot) {
     if (d_file) { // the unlinked file should be gone
       pass = 0;
     }
-    fprintf(stdout, "rand_unlink_: %s@%s\t%s\n",
+    fprintf(stdout, "cinq_unlink: %s@%s\t%s\n",
             dir_file[k_num_seg], dir_file[k_num_seg - 1],
             pass ? "OK" : "WRONG");
     if (pass) ++num_unlink_ok;
@@ -389,31 +388,95 @@ static void *rand_create_ln_rm_(void *droot) {
     pass = 0;
     struct inode *i_parent = dir_dent->d_parent->d_inode;
     if (i_parent->i_op->rmdir(i_parent, dir_dent) != -ENOTEMPTY) {
-      DEBUG_("[Error@rand_create_ln_rm_] removed non-emtpy dir: %s\n",
+      DEBUG_("[Error@rand_create_ln_rm] removed non-emtpy dir: %s\n",
              i_cnode(dir_inode)->ci_name);
       continue;
     }
     if (dir_inode->i_op->unlink(dir_inode, link_dent)) { // make the dir empty
-      DEBUG_("[Error@rand_create_ln_rm_] failed to delete link file: %s@%s\n",
+      DEBUG_("[Error@rand_create_ln_rm] failed to delete link file: %s@%s\n",
              link_dent->d_name.name, i_cnode(dir_inode)->ci_name);
       continue;
     }
     if (i_parent->i_op->rmdir(i_parent, dir_dent)) {
-      DEBUG_("[Error@rand_create_ln_rm_] failed to rmdir: %s\n",
+      DEBUG_("[Error@rand_create_ln_rm] failed to rmdir: %s\n",
              dir_dent->d_name.name);
       continue;
     }
-    fprintf(stdout, "rand_rmdir_: %s\tOK\n", dir_file[k_num_seg - 1]);
+    fprintf(stdout, "cinq_rmdir: %s\tOK\n", dir_file[k_num_seg - 1]);
     ++num_rmdir_ok;
     
   } // for
   
-  spin_lock(&create_link_num_lock_);
-  create_num_ok_ += num_create_ok;
-  link_num_ok_ += num_link_ok;
-  unlink_num_ok_ += num_unlink_ok;
-  rmdir_num_ok_ += num_rmdir_ok;
-  spin_unlock(&create_link_num_lock_);
+  spin_lock(&create_ln_rm_lock_);
+  create_ok_cnt += num_create_ok;
+  create_test_cnt += num_create_test;
+  ln_ok_cnt += num_link_ok;
+  unlink_ok_cnt += num_unlink_ok;
+  rm_ok_cnt += num_rmdir_ok;
+  spin_unlock(&create_ln_rm_lock_);
+  pthread_exit(NULL);
+}
+
+atomic_t num_sym_ok = { .counter = 0 };
+atomic_t num_sym_test = { .counter = 0 };
+
+static void *rand_sym(void *droot) {
+  // randomly choose client file system
+  char fs_name[MAX_NAME_LEN + 1];
+  const int fs_j = rand() % FS_CHILDREN_ + 1;
+  const int fs_k = rand() % (FS_CHILDREN_ + 1);
+  sprintf(fs_name, "0_%x_%x", fs_j, fs_k);
+  struct cinq_fsnode *req_fs = cfs_find_syn(&file_systems, fs_name);
+  
+  const int k_num_seg = 4;
+  char dir[k_num_seg][MAX_NAME_LEN + 1];
+  int i;
+  for (i = 0; i < NUM_CREATE_; ++i) {
+    // randomly choose directory
+    const int dir_i = rand() % CNODE_CHILDREN_;
+    const int dir_j = rand() % CNODE_CHILDREN_;
+    const int dir_k = rand() % CNODE_CHILDREN_;
+    // lookup path "/fs_name/dir[1]/dir[2]/dir[3]"
+    sprintf(dir[0], "%s", fs_name); // the first segment is special
+    sprintf(dir[1], "%x", dir_i);   // the rest are normal ones under root
+    sprintf(dir[2], "%s.%x", dir[1], dir_j);
+    sprintf(dir[3], "%s.%x", dir[2], dir_k);
+    
+    struct dentry* const dir_dent = do_lookup_(droot, (void *)dir, k_num_seg);
+    if (!dir_dent || strcmp(fs_name, d_fs(dir_dent)->fs_name) == 0) {
+      continue;
+    }
+    struct inode* const dir_inode = dir_dent->d_inode;
+    
+    atomic_inc(&num_sym_test);
+    
+    /* Example for invoking cinq_symlink */
+    char* const symname = "/a/b/c";
+    char file_name[MAX_NAME_LEN + 1];
+    sprintf(file_name, "sym_%d", rand());
+    const struct qstr q_file_name =
+        { .name = (unsigned char *)file_name, .len = strlen(file_name) };
+    struct dentry* const file_dent = d_alloc(dir_dent, &q_file_name);
+    file_dent->d_fsdata = req_fs;
+    int err;
+    err = dir_inode->i_op->symlink(dir_inode, file_dent, symname);
+    if (err) {
+      DEBUG_("[Error@rand_sym_] failed to symlink: %s@%s\n",
+             file_dent->d_name.name, dir_dent->d_name.name);
+      continue;
+    }
+    
+    /* Example for invoking cinq_followlink */
+    // NOTE that usage of readlink and followlink are not demonstrated here.
+    // These tests are only to validate their functionality.
+    // For usage in user space, refer to linux VFS path walking.
+    char *buf = malloc(256);
+    generic_readlink(file_dent, buf, 256); // including cinq_followlink
+    err = strcmp(buf, symname);
+    DEBUG_ON_(err, "[Warn@rand_sym] read out wrong symname: %s\n", buf);
+    fprintf(stdout, "cinq_sym: %s\t%s\n", symname, err ? "WRONG" : "OK");
+    if (!err) atomic_inc(&num_sym_ok);
+  }
   pthread_exit(NULL);
 }
 
@@ -481,7 +544,7 @@ int main(int argc, const char * argv[]) {
   pthread_t lookup_thr[LOOKUP_THR_NUM_];
   memset(lookup_thr, 0, sizeof(lookup_thr));
   for (ti = 0; ti < LOOKUP_THR_NUM_; ++ti) {
-    err = pthread_create(&lookup_thr[ti], NULL, rand_lookup_, droot);
+    err = pthread_create(&lookup_thr[ti], NULL, rand_lookup, droot);
     DEBUG_ON_(err, "[Error@main] error code of pthread_create: %d.\n", err);
   }
   for (ti = 0; ti < LOOKUP_THR_NUM_; ++ti) {
@@ -489,15 +552,27 @@ int main(int argc, const char * argv[]) {
     DEBUG_ON_(err, "[Error@main] error code of pthread_join: %d.\n", err);
   }
   
-  fprintf(stdout, "\nTest create:\n");
+  fprintf(stdout, "\nTest create_ln_rm:\n");
   pthread_t create_thr[CREATE_THR_NUM_];
   memset(create_thr, 0, sizeof(create_thr));
   for (ti = 0; ti < CREATE_THR_NUM_; ++ti) {
-    err = pthread_create(&create_thr[ti], NULL, rand_create_ln_rm_, droot);
+    err = pthread_create(&create_thr[ti], NULL, rand_create_ln_rm, droot);
     DEBUG_ON_(err, "[Error@main] error code of pthread_create: %d.\n", err);
   }
   for (ti = 0; ti < CREATE_THR_NUM_; ++ti) {
     err = pthread_join(create_thr[ti], &status);
+    DEBUG_ON_(err, "[Error@main] error code of pthread_join: %d.\n", err);
+  }
+  
+  fprintf(stdout, "\nTest symlink:\n");
+  pthread_t sym_thr[CREATE_THR_NUM_];
+  memset(sym_thr, 0, sizeof(sym_thr));
+  for (ti = 0; ti < CREATE_THR_NUM_; ++ti) {
+    err = pthread_create(&sym_thr[ti], NULL, rand_sym, droot);
+    DEBUG_ON_(err, "[Error@main] error code of pthread_create: %d.\n", err);
+  }
+  for (ti = 0; ti < CREATE_THR_NUM_; ++ti) {
+    err = pthread_join(sym_thr[ti], &status);
     DEBUG_ON_(err, "[Error@main] error code of pthread_join: %d.\n", err);
   }
   
@@ -510,22 +585,26 @@ int main(int argc, const char * argv[]) {
   // Show results
   int expected_num = NUM_LOOKUP_ * LOOKUP_THR_NUM_;
   fprintf(stdout, "\nmkdir/lookup: %d/%d checked ok [%s].\n",
-          lookup_num_ok_, expected_num,
-          lookup_num_ok_ < expected_num ? "NOT Passed" : "Passed");
-  
-  expected_num = NUM_CREATE_ * CREATE_THR_NUM_;
+          lookup_ok_cnt, expected_num,
+          lookup_ok_cnt < expected_num ? "NOT Passed" : "Passed");
+
   fprintf(stdout, "create: %d/%d checked ok [%s].\n",
-          create_num_ok_, expected_num,
-          create_num_ok_ < expected_num ? "NOT Passed" : "Passed");
+          create_ok_cnt, create_test_cnt,
+          create_ok_cnt < create_test_cnt ? "NOT Passed" : "Passed");
   fprintf(stdout, "link: %d/%d checked ok [%s].\n",
-          link_num_ok_, expected_num,
-          link_num_ok_ < expected_num ? "NOT Passed" : "Passed");
+          ln_ok_cnt, create_test_cnt,
+          ln_ok_cnt < create_test_cnt ? "NOT Passed" : "Passed");
   fprintf(stdout, "unlink: %d/%d checked ok [%s].\n",
-          unlink_num_ok_, expected_num,
-          unlink_num_ok_ < expected_num ? "NOT Passed" : "Passed");
+          unlink_ok_cnt, create_test_cnt,
+          unlink_ok_cnt < create_test_cnt ? "NOT Passed" : "Passed");
   fprintf(stdout, "rmdir: %d/%d checked ok [%s].\n",
-          rmdir_num_ok_, expected_num,
-          rmdir_num_ok_ < expected_num ? "NOT Passed" : "Passed");
+          rm_ok_cnt, create_test_cnt,
+          rm_ok_cnt < create_test_cnt ? "NOT Passed" : "Passed");
+  
+  fprintf(stdout, "sym: %d/%d checked ok [%s].\n",
+          atomic_read(&num_sym_ok), atomic_read(&num_sym_test),
+          atomic_read(&num_sym_ok) < atomic_read(&num_sym_test) ?
+          "NOT Passed" : "Passed");
   
   int final_inode_num = atomic_read(&num_inodes_);
   fprintf(stdout, "inode leak test: %d -> %d\t[%s].\n",

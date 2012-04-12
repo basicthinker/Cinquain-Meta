@@ -610,6 +610,55 @@ static inline struct dentry * d_alloc_root(struct inode * root_inode)
 	}
 	return res;
 }
+
+// fs/namei.h
+static inline void nd_set_link(struct nameidata *nd, char *path) {
+  nd->saved_names[nd->depth] = path;
+}
+
+static inline char *nd_get_link(struct nameidata *nd) {
+  return nd->saved_names[nd->depth];
+}
+
+// fs/namei.c
+static inline int vfs_readlink_(struct dentry *dentry, char *buffer,
+                               int buflen, const char *link) {
+	int len;
   
+	len = PTR_ERR(link);
+	if (IS_ERR(link))
+		return len;
+  
+	len = strlen(link);
+	if (len > (unsigned) buflen)
+		len = buflen;
+	// if (copy_to_user(buffer, link, len))
+  strncpy(buffer, link, len);
+
+	return len;
+}
+
+/*
+ * A helper for ->readlink().  This should be used *ONLY* for symlinks that
+ * have ->follow_link() touching nd only in nd_set_link().  Using (or not
+ * using) it for any given inode is up to filesystem.
+ */
+static int generic_readlink(struct dentry *dentry, char *buffer, int buflen)
+{
+	struct nameidata nd;
+	void *cookie;
+	int res;
+  
+	nd.depth = 0;
+	cookie = dentry->d_inode->i_op->follow_link(dentry, &nd);
+	if (IS_ERR(cookie))
+		return PTR_ERR(cookie);
+  
+	res = vfs_readlink_(dentry, buffer, buflen, nd_get_link(&nd));
+	if (dentry->d_inode->i_op->put_link)
+		dentry->d_inode->i_op->put_link(dentry, &nd, cookie);
+	return res;
+}
+
 #endif // __KERNEL__
 #endif // CINQUAIN_META_VFS_H_

@@ -82,6 +82,8 @@ atomic_t num_inodes_;
     ((struct journal_entry *)malloc(sizeof(struct journal_entry)))
 #define journal_entry_free_(p) (free(p))
 
+#define kmalloc(n) malloc(n)
+
 #define CURRENT_TIME ((struct timespec) { time(NULL), 0 })
 
 #endif // __KERNEL__
@@ -136,31 +138,12 @@ static inline long PTR_ERR(const void *ptr) { // include/linux/err.h
 }
 
 #include "include-asm-generic-errno.h"
+#include "include-linux-stat.h"
 
 // linux/err.h
 #define MAX_ERRNO 4095
 #define IS_ERR_VALUE(x) unlikely((x) >= (unsigned long)-MAX_ERRNO)
 #define IS_ERR(ptr) (IS_ERR_VALUE((unsigned long)ptr))
-
-// linux/stat.h
-#define S_IFMT   00170000
-#define S_IFSOCK 0140000
-#define S_IFLNK  0120000
-#define S_IFREG  0100000
-#define S_IFBLK  0060000
-#define S_IFDIR  0040000
-#define S_IFCHR  0020000
-#define S_IFIFO  0010000
-#define S_ISUID  0004000
-#define S_ISGID  0002000
-#define S_ISVTX  0001000
-#define S_ISLNK(m)      (((m) & S_IFMT) == S_IFLNK)
-#define S_ISREG(m)      (((m) & S_IFMT) == S_IFREG)
-#define S_ISDIR(m)      (((m) & S_IFMT) == S_IFDIR)
-#define S_ISCHR(m)      (((m) & S_IFMT) == S_IFCHR)
-#define S_ISBLK(m)      (((m) & S_IFMT) == S_IFBLK)
-#define S_ISFIFO(m)     (((m) & S_IFMT) == S_IFIFO)
-#define S_ISSOCK(m)     (((m) & S_IFMT) == S_IFSOCK)
 
 // linux/sched.h
 #define TASK_RUNNING            0

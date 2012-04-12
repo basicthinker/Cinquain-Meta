@@ -47,6 +47,12 @@ const struct inode_operations cinq_file_inode_operations = {
 	.setattr	= cinq_setattr
 };
 
+const struct inode_operations cinq_symlink_inode_operations = {
+  .readlink       = generic_readlink,
+  .follow_link    = cinq_follow_link,
+  .setattr        = cinq_setattr
+};
+
 const struct file_operations cinq_file_operations = {
 	.read     = cinq_read,
 	.write		= cinq_write,

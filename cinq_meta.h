@@ -118,6 +118,7 @@ struct cinq_tag {
   atomic_t t_nchild;
   enum cinq_inherit_type t_mode;
   unsigned char t_file_handle[FILE_HASH_WIDTH];
+  char *t_symname;
 
   UT_hash_handle hh; // default handle name
 };
@@ -216,7 +217,9 @@ extern int cinq_link(struct dentry *old_dentry, struct inode *dir,
               struct dentry *dentry);
 extern int cinq_unlink(struct inode *dir, struct dentry *dentry);
 
-extern int cinq_symlink(struct inode *dir, struct dentry *dentry, const char *symname);
+extern int cinq_symlink(struct inode *dir, struct dentry *dentry,
+                        const char *symname);
+extern void *cinq_follow_link(struct dentry *dentry, struct nameidata *nd);
 
 extern int cinq_rmdir(struct inode *dir, struct dentry *dentry);
 
@@ -256,6 +259,7 @@ extern const struct file_system_type cinqfs;
 extern const struct super_operations cinq_super_operations;
 extern const struct inode_operations cinq_dir_inode_operations;
 extern const struct inode_operations cinq_file_inode_operations;
+extern const struct inode_operations cinq_symlink_inode_operations;
 extern const struct file_operations cinq_file_operations;
 extern const struct file_operations cinq_dir_operations;
 

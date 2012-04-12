@@ -11,6 +11,7 @@
 //
 
 #include "cinq_meta.h"
+#include "util.h"
 
 static inline int inode_is_root_(const struct inode *inode) {
   return i_tag(inode)->t_fs == META_FS;
@@ -221,12 +222,13 @@ static struct inode *cinq_get_inode_(const struct inode *dir, int mode) {
         inc_nlink(inode);
         break;
       case S_IFLNK:
-        //  inode->i_op = &page_symlink_inode_operations;
+        inode->i_op = &cinq_symlink_inode_operations;
         break;
       default:
         DEBUG_("[Warn@cinq_new_inode] mode not matched under %lx.\n",
                dir->i_ino);
-        break;
+        iput(inode);
+        return NULL;
     }
   }
   return inode;
@@ -246,8 +248,13 @@ static void cnode_tag_ancestors_(const struct inode *child,
       inc_nchild_(tag);
       break;
     }
-    int mode = (child->i_mode | S_IFDIR) & ~S_IFREG;
+    int mode = (child->i_mode & ~S_IFMT) | S_IFDIR;
     struct inode *parent = cinq_get_inode_(child, mode);
+    if (!parent) {
+      DEBUG_("[Error@cnode_tag_ancestors_] inode allocation failed "
+             "when tagging ancestors of %s.\n", i_cnode(child)->ci_name);
+      return;
+    }
     tag = tag_new_(fs, CINQ_MERGE, parent);
     cnode_add_tag_(ci_parent, tag);
     write_unlock(&ci_parent->ci_tags_lock);
@@ -370,6 +377,25 @@ int cinq_create(struct inode *dir, struct dentry *dentry,
     return -EINVAL;
   }
   return cinq_mknod_(dir, dentry, mode | S_IFREG);
+}
+
+int cinq_symlink(struct inode *dir, struct dentry *dentry,
+                 const char *symname) {
+  if (unlikely(!dentry->d_fsdata)) {
+    DEBUG_("[Error@cinq_symlink] no fsnode is specified.\n");
+    return -EINVAL;
+  }
+  
+  int err = cinq_mknod_(dir, dentry, S_IFLNK | S_IRWXUGO);
+  if (!err) {
+    struct inode *inode = dentry->d_inode;
+    struct cinq_tag *tag = i_tag(inode);
+    int size = sizeof(symname);
+    tag->t_symname = (char *)kmalloc(size);
+    if (!tag->t_symname) return -ENOSPC;
+    memcpy(tag->t_symname, symname, size);
+  }
+  return err;
 }
 
 int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
@@ -576,11 +602,6 @@ int cinq_unlink(struct inode *dir, struct dentry *dentry) {
   return 0;
 }
 
-int cinq_symlink(struct inode *dir, struct dentry *dentry,
-                 const char *symname) {
-  return 0;
-}
-
 static int cinq_empty_dir_(struct cinq_inode *dir_cnode,
                            struct cinq_fsnode *fs) {
   struct cinq_tag *tag;
@@ -611,6 +632,12 @@ int cinq_rmdir(struct inode *dir, struct dentry *dentry) {
     drop_nlink(dir);
   }
   return err;
+}
+
+void *cinq_follow_link(struct dentry *dentry, struct nameidata *nd) {
+  struct cinq_tag *tag = i_tag(dentry->d_inode);
+  nd_set_link(nd, (char *)tag->t_symname);
+  return NULL;
 }
 
 int cinq_rename(struct inode *old_dir, struct dentry *old_dentry,
