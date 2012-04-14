@@ -576,7 +576,8 @@ int main(int argc, const char * argv[]) {
     DEBUG_ON_(err, "[Error@main] error code of pthread_join: %d.\n", err);
   }
   
-  int max_inode_num = atomic_read(&num_inodes_);
+  int max_dentry_num = atomic_read(&num_dentry_);
+  int max_inode_num = atomic_read(&num_inode_);
   
   // Kill file systems
   cinqfs.kill_sb(droot->d_sb);
@@ -606,7 +607,12 @@ int main(int argc, const char * argv[]) {
           atomic_read(&num_sym_ok) < atomic_read(&num_sym_test) ?
           "NOT Passed" : "Passed");
   
-  int final_inode_num = atomic_read(&num_inodes_);
+  int final_dentry_num = atomic_read(&num_dentry_);
+  fprintf(stdout, "dentry leak test: %d -> %d\t[%s].\n",
+          max_dentry_num, final_dentry_num,
+          final_dentry_num ? "NOT Passed" : "Passed");
+  
+  int final_inode_num = atomic_read(&num_inode_);
   fprintf(stdout, "inode leak test: %d -> %d\t[%s].\n",
           max_inode_num, final_inode_num,
           final_inode_num ? "NOT Passed" : "Passed");

@@ -231,7 +231,7 @@ static inline struct inode *alloc_inode_(struct super_block *sb)
 		return NULL;
   
 #ifdef CINQ_DEBUG
-  atomic_inc(&num_inodes_);
+  atomic_inc(&num_inode_);
 #endif // CINQ_DEBUG
   
   // inode_init_once // expanded as following

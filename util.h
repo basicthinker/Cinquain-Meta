@@ -35,7 +35,8 @@
 #endif
 
 #ifdef CINQ_DEBUG
-atomic_t num_inodes_;
+atomic_t num_dentry_;
+atomic_t num_inode_;
 #endif // CINQ_DEBUG
 
 #ifndef CINQ_DEBUG
@@ -91,6 +92,8 @@ atomic_t num_inodes_;
 
 #ifndef __KERNEL__
 // Private: those in kernel but not user-space
+
+# define __releases(x)
 
 typedef unsigned int umode_t;
 typedef unsigned int uid_t;

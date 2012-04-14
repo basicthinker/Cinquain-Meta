@@ -12,6 +12,8 @@
 
 #include "vfs.h"
 
+#define IS_ROOT(x) ((x) == (x)->d_parent)
+
 // Supplement of kernel functions to user space.
 // Subject to user-space adjustment.
 
@@ -79,6 +81,9 @@ struct dentry *d_alloc(struct dentry * parent, const struct qstr *name) {
 	}
   
 	// this_cpu_inc(nr_dentry);
+#ifdef CINQ_DEBUG
+  atomic_inc(&num_dentry_);
+#endif // CINQ_DEBUG
   
 	return dentry;
 }
@@ -98,6 +103,8 @@ struct dentry *d_alloc(struct dentry * parent, const struct qstr *name) {
  * in use by the dcache.
  */
 void d_instantiate(struct dentry *dentry, struct inode * inode) {
+  DEBUG_ON_(!list_empty(&dentry->d_alias), "[Error@d_instantiate] "
+            "dentry already associated with another inode.");
 	if (inode) {
 		spin_lock(&inode->i_lock);
     
@@ -172,11 +179,191 @@ struct dentry *d_splice_alias(struct inode *inode,
 	return NULL;
 }
 
+/*
+ * Release the dentry's inode, using the filesystem
+ * d_iput() operation if defined. Dentry has no refcount
+ * and is unhashed.
+ */
+static void dentry_iput_(struct dentry * dentry)
+  __releases(dentry->d_lock)
+  __releases(dentry->d_inode->i_lock)
+{
+	struct inode *inode = dentry->d_inode;
+	if (inode) {
+		dentry->d_inode = NULL;
+		list_del_init(&dentry->d_alias);
+		spin_unlock(&dentry->d_lock);
+		spin_unlock(&inode->i_lock);
+//		if (!inode->i_nlink)
+//			fsnotify_inoderemove(inode);
+//		if (dentry->d_op && dentry->d_op->d_iput)
+//			dentry->d_op->d_iput(dentry, inode);
+//		else
+			iput(inode);
+	} else {
+		spin_unlock(&dentry->d_lock);
+	}
+}
+
+/**
+ * d_kill - kill dentry and return parent
+ * @dentry: dentry to kill
+ * @parent: parent dentry
+ *
+ * The dentry must already be unhashed and removed from the LRU.
+ *
+ * If this is the root of the dentry tree, return NULL.
+ *
+ * dentry->d_lock and parent->d_lock must be held by caller, and are dropped by
+ * d_kill.
+ */
+static struct dentry *d_kill_(struct dentry *dentry, struct dentry *parent)
+  __releases(dentry->d_lock)
+  __releases(parent->d_lock)
+  __releases(dentry->d_inode->i_lock)
+{
+	list_del(&dentry->d_u.d_child);
+//	dentry->d_flags |= DCACHE_DISCONNECTED;
+	if (parent)
+		spin_unlock(&parent->d_lock);
+	dentry_iput_(dentry);
+  
+	// d_free(dentry); // expanded as below
+  DEBUG_ON_(dentry->d_count, "[Error@d_kill_] to free dentry with reference:"
+            " %d\n", dentry->d_count);
+//	this_cpu_dec(nr_dentry);
+//	if (dentry->d_op && dentry->d_op->d_release)
+//		dentry->d_op->d_release(dentry);
+//  
+//	/* if dentry was never visible to RCU, immediate free is OK */
+//	if (!(dentry->d_flags & DCACHE_RCUACCESS))
+//		__d_free(&dentry->d_u.d_rcu);
+//	else
+//		call_rcu(&dentry->d_u.d_rcu, __d_free);
+  free((char *)dentry->d_name.name);
+  free(dentry);
+  
+#ifdef CINQ_DEBUG
+  atomic_dec(&num_dentry_);
+#endif // CINQ_DEBUG
+  
+	return parent;
+}
+
+/*
+ * Finish off a dentry we've decided to kill.
+ * dentry->d_lock must be held, returns with it unlocked.
+ * If ref is non-zero, then decrement the refcount too.
+ * Returns dentry requiring refcount drop, or NULL if we're done.
+ */
+static inline struct dentry *dentry_kill_(struct dentry *dentry, int ref)
+	__releases(dentry->d_lock)
+{
+	struct inode *inode;
+	struct dentry *parent;
+  
+	inode = dentry->d_inode;
+	if (inode && !spin_trylock(&inode->i_lock)) {
+relock:
+		spin_unlock(&dentry->d_lock);
+//		cpu_relax();
+		return dentry; /* try again with same dentry */
+	}
+  
+	if (IS_ROOT(dentry))
+		parent = NULL;
+	else
+		parent = dentry->d_parent;
+  
+	if (parent && !spin_trylock(&parent->d_lock)) {
+		if (inode)
+			spin_unlock(&inode->i_lock);
+		goto relock;
+	}
+  
+	if (ref)
+		dentry->d_count--;
+  
+//	dentry_lru_del(dentry);
+//	__d_drop(dentry);
+
+	return d_kill_(dentry, parent);
+}
+
+/* 
+ * This is dput
+ *
+ * This is complicated by the fact that we do not want to put
+ * dentries that are no longer on any hash chain on the unused
+ * list: we'd much rather just get rid of them immediately.
+ *
+ * However, that implies that we have to traverse the dentry
+ * tree upwards to the parents which might _also_ now be
+ * scheduled for deletion (it may have been only waiting for
+ * its last child to go away).
+ *
+ * This tail recursion is done by hand as we don't want to depend
+ * on the compiler to always get this right (gcc generally doesn't).
+ * Real recursion would eat up our stack space.
+ */
+
+/*
+ * dput - release a dentry
+ * @dentry: dentry to release 
+ *
+ * Release a dentry. This will drop the usage count and if appropriate
+ * call the dentry unlink method as well as removing it from the queues and
+ * releasing its resources. If the parent dentries were scheduled for release
+ * they too may now get deleted.
+ */
+void dput(struct dentry *dentry) {
+	if (!dentry)
+		return;
+  
+repeat:
+//	if (dentry->d_count == 1)
+//		might_sleep();
+	spin_lock(&dentry->d_lock);
+	DEBUG_ON_(!dentry->d_count, "[Error@dput_] put bad dentry: %d.\n",
+          dentry->d_count);
+	if (dentry->d_count > 1) {
+		dentry->d_count--;
+		spin_unlock(&dentry->d_lock);
+		return;
+	}
+  
+//	if (dentry->d_flags & DCACHE_OP_DELETE) {
+//		if (dentry->d_op->d_delete(dentry))
+//			goto kill_it;
+//	}
+  
+// 	if (d_unhashed(dentry))
+//		goto kill_it;
+  
+	/* Otherwise leave it cached and ensure it's on the LRU */
+//	dentry->d_flags |= DCACHE_REFERENCED;
+//	dentry_lru_add(dentry);
+//  
+//	dentry->d_count--;
+//	spin_unlock(&dentry->d_lock);
+//	return;
+  
+//kill_it:
+	dentry = dentry_kill_(dentry, 1);
+	if (dentry)
+		goto repeat;
+}
+
 // Invoked when super block is killed
 void d_genocide(struct dentry *root) {
   if (!root) return;
-  free(root);
-  // Deal with its children...
+  // Deal with its children... This is only a reference implementation
+  // Kernel avoids recursive function. Recomended.
+  struct dentry *cur, *tmp;
+  list_for_each_entry_safe(cur, tmp, &root->d_subdirs, d_u.d_child) {
+    d_genocide(cur);
+  }
+  dput(root);
 }
 
 // Returns the current uid who is taking some file system operation

@@ -47,7 +47,7 @@ static int cinq_fill_super_(struct super_block *sb, void *data, int silent) {
   return 0;
 }
 
-struct dentry *cinq_mount (struct file_system_type *fs_type, int flags,
+struct dentry *cinq_mount(struct file_system_type *fs_type, int flags,
                            const char *dev_name, void *data) {
   journal_init(&cinq_journal, "Cinquain");
   thread_init(&journal_thread, journal_writeback, &cinq_journal,
@@ -56,18 +56,20 @@ struct dentry *cinq_mount (struct file_system_type *fs_type, int flags,
   return mount_nodev(fs_type, flags, data, cinq_fill_super_);
 }
 
-void cinq_kill_sb (struct super_block *sb) {
+void cinq_kill_sb(struct super_block *sb) {
   if (sb->s_root) {
     while (!journal_empty_syn(&cinq_journal)) {
       sleep(1);
     }
     thread_stop(&journal_thread);
-    cnode_evict_all(i_cnode(sb->s_root->d_inode));
     d_genocide(sb->s_root);
+    cnode_evict_all(i_cnode(sb->s_root->d_inode));
+    dput(sb->s_root); // cancel the extra reference and delete
   }
   DEBUG_ON_(!sb->s_root, "[Warn@cinq_kill_sb]: invoked on null dentry.\n");
 }
 
+// Not actually delte inodes since they are in-memory
 void cinq_evict_inode(struct inode *inode) {
   if (!inode->i_nlink) { // && !is_bad_inode(inode)
     invalidate_inode_buffers(inode);
