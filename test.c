@@ -115,7 +115,7 @@ static void *make_dir_tree(void *fsnode) {
   int mi, mj, mk;
   sscanf(fs->fs_name, "%x_%x_%x", &mi, &mj, &mk);
   char buffer[MAX_NAME_LEN + 1];
-  int mode = (CINQ_MERGE << CINQ_MODE_SHIFT) | S_IFDIR;
+  int mode = (CINQ_VISIBLE << CINQ_MODE_SHIFT) | S_IFDIR;
   
   // make three-layer directory tree for test
   for (i = mi; i < CNODE_CHILDREN_; ++i) {
@@ -314,7 +314,7 @@ static void *rand_create_ln_rm(void *droot) {
     
     /* Example for invoking cinq_create */
     struct inode* const dir_inode = dir_dent->d_inode;
-    int mode = (CINQ_MERGE << CINQ_MODE_SHIFT) | S_IFREG;
+    int mode = (CINQ_VISIBLE << CINQ_MODE_SHIFT) | S_IFREG;
     char file_name[MAX_NAME_LEN + 1];
     sprintf(file_name, "%d", rand());
     const struct qstr q_file_name =

@@ -57,9 +57,9 @@ extern void fsnode_move(struct cinq_fsnode *child,
 // Removes the fsnode and connect its single child to its parent
 extern void fsnode_bridge(struct cinq_fsnode *out);
 
-enum cinq_inherit_type {
-  CINQ_MERGE = 0,
-  CINQ_OVERWR = 1
+enum cinq_visibility {
+  CINQ_VISIBLE = 0,
+  CINQ_INVISIBLE = 1
 };
 #define CINQ_MODE_SHIFT 30
 
@@ -116,7 +116,7 @@ struct cinq_tag {
   struct inode *t_inode; // whose i_no points to this tag
 
   atomic_t t_nchild;
-  enum cinq_inherit_type t_mode;
+  enum cinq_visibility t_mode;
   unsigned char t_file_handle[FILE_HASH_WIDTH];
   char *t_symname;
 
@@ -137,6 +137,12 @@ static inline struct cinq_fsnode *d_fs(const struct dentry *dentry) {
 
 static inline int negative(const struct cinq_tag *tag) {
   return tag->t_inode == NULL;
+}
+
+static inline int impenetrable(const struct cinq_tag *tag,
+                               const struct cinq_fsnode *req_fs) {
+   return (negative(tag) && tag->t_fs == req_fs) ||
+          (negative(tag) && tag->t_mode == CINQ_VISIBLE);
 }
 
 struct cinq_inode {
@@ -162,7 +168,7 @@ static inline struct cinq_inode *i_cnode(const struct inode *inode) {
 
 #define foreach_ancestor_tag(fs, tag, cnode) \
     for (tag = cnode_find_tag_(cnode, fs); \
-         fs != META_FS && (!tag || !negative(tag)); \
+         fs != META_FS && (!tag || !impenetrable(tag, fs)); \
          fs = fs->fs_parent, tag = cnode_find_tag_(cnode, fs))
 
 /* super.c */
