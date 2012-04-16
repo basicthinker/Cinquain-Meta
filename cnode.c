@@ -13,7 +13,7 @@
 #include "cinq_meta.h"
 #include "util.h"
 
-static inline int inode_is_root_(const struct inode *inode) {
+static inline int inode_meta_root_(const struct inode *inode) {
   return i_tag(inode)->t_fs == META_FS;
 }
 
@@ -410,30 +410,55 @@ int cinq_symlink(struct inode *dir, struct dentry *dentry,
 }
 
 int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
-  struct cinq_inode *dir_cnode = i_cnode(dir);
-  struct cinq_fsnode *fs = dentry->d_fsdata;
-  if (unlikely(!fs)) {
-    DEBUG_("[Error@cinq_mkdir] null fsnode for %s under dir %lx.\n",
-            dentry->d_name.name, dir->i_ino);
-    return -EINVAL;
-  }
   
-  if (inode_is_root_(dir)) {
-    // registers new file system node
-    struct inode *fs_inode = cinq_get_inode_(dir, mode);
-    struct cinq_tag *tag = tag_new_(fs, mode >> CINQ_MODE_SHIFT, fs_inode);
-    fs->fs_root = dentry;
-    cnode_add_tag_syn(dir_cnode, tag);
+  if (unlikely(inode_meta_root_(dir))) { // not actually make dir
+    char namestr[MAX_NAME_LEN + 1];
+    strncpy(namestr, (char *)dentry->d_name.name, dentry->d_name.len);
+    char *fsnames[2] = { NULL, NULL };
+    struct cinq_fsnode *fsnodes[2] = { NULL, NULL };
+    char *cur = namestr;
+    char *token = strsep(&cur, FS_DELIM);
+    for (int i = 0; token && i < 2; token = strsep(&cur, FS_DELIM), ++i) {
+      fsnames[i] = token;
+      fsnodes[i] = cfs_find_syn(&file_systems, token);
+    }
+    struct cinq_fsnode *parent_fs = fsnodes[0];
+    struct cinq_fsnode *child_fs = fsnodes[1];
     
-    d_instantiate(dentry, fs_inode);
-    dir->i_mtime = dir->i_ctime = CURRENT_TIME;
-    
-    journal_inode(fs_inode, CREATE);
-    journal_cnode(dir_cnode, UPDATE);
-    // journal_inode(dir, UPDATE);
+    if (!fsnames[1] || (!parent_fs && strcmp(fsnames[0], "META_FS"))) {
+      DEBUG_("[Error@cinq_mkdir] parent fs NOT properly specified: %s\n",
+             fsnames[0]);
+      return -EINVAL;
+    }
+    if (!parent_fs) parent_fs = META_FS;
+  
+    struct cinq_inode *dir_cnode = i_cnode(dir);
+    if (!child_fs) { // makes new file system node
+      child_fs = fsnode_new(parent_fs, fsnames[1]);
+      struct inode *iroot = cinq_get_inode_(dir, mode);
+      struct cinq_tag *tag = tag_new_(child_fs,
+                                      mode >> CINQ_MODE_SHIFT, iroot);
+      cnode_add_tag_syn(dir_cnode, tag);
+      
+      d_instantiate(dentry, iroot);
+      child_fs->fs_root = dentry;
+      dir->i_mtime = dir->i_ctime = CURRENT_TIME;
+      
+      journal_inode(iroot, CREATE);
+      journal_cnode(dir_cnode, UPDATE);
+      // journal_inode(dir, UPDATE);
+    } else { // make inheritance
+      fsnode_move(child_fs, parent_fs);
+    }
     return 0;
   }
-
+               
+  struct cinq_fsnode *fs = dentry->d_fsdata;
+  if (unlikely(!fs)) {
+   DEBUG_("[Error@cinq_mkdir] null fsnode for %s under dir %lx.\n",
+          dentry->d_name.name, dir->i_ino);
+   return -EINVAL;
+  }
   int err = cinq_mknod_(dir, dentry, mode | S_IFDIR);
   if (!err) {
     inc_nlink(dir); // for ".." entry
@@ -480,16 +505,16 @@ struct dentry *cinq_lookup(struct inode *dir, struct dentry *dentry,
   char *name = (char *)dentry->d_name.name;
   
   struct inode *inode;
-  if (inode_is_root_(dir)) {
+  if (inode_meta_root_(dir)) {
     struct cinq_fsnode *fs = cfs_find_syn(&file_systems, name);
     if (!fs) return NULL;
     inode = fs->fs_root->d_inode;
     dentry->d_fsdata = fs;
   } else {
     inode = cinq_lookup_(dir, name);
-    if (nameidata) { // pass the request ID on
-      dentry->d_fsdata = nameidata->path.dentry->d_fsdata;
-    }
+    // pass the request ID on
+    dentry->d_fsdata = nameidata ?
+        nameidata->path.dentry->d_fsdata : dentry->d_parent->d_fsdata;
   }
   if (!inode) {
     return ERR_PTR(-EIO);

@@ -42,8 +42,8 @@ static inline int fsnode_is_root(const struct cinq_fsnode *fsnode) {
 
 // Creates a fsnode.
 // @parent the fsnode's parent, while NULL indicates a root fsnode.
-extern struct cinq_fsnode *fsnode_new(const char *name,
-                                      struct cinq_fsnode *parent);
+extern struct cinq_fsnode *fsnode_new(struct cinq_fsnode *parent,
+                                      const char *name);
 
 // Destroys a single fsnode without children
 extern void fsnode_evict(struct cinq_fsnode *fsnode);
@@ -135,7 +135,7 @@ static inline struct cinq_fsnode *d_fs(const struct dentry *dentry) {
   return i_tag(dentry->d_inode)->t_fs;
 }
 
-static inline int negtive(const struct cinq_tag *tag) {
+static inline int negative(const struct cinq_tag *tag) {
   return tag->t_inode == NULL;
 }
 
@@ -162,7 +162,7 @@ static inline struct cinq_inode *i_cnode(const struct inode *inode) {
 
 #define foreach_ancestor_tag(fs, tag, cnode) \
     for (tag = cnode_find_tag_(cnode, fs); \
-         fs && (!tag || !negtive(tag)); \
+         fs != META_FS && (!tag || !negative(tag)); \
          fs = fs->fs_parent, tag = cnode_find_tag_(cnode, fs))
 
 /* super.c */

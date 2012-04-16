@@ -17,6 +17,7 @@
 
 #ifdef __KERNEL__
 
+#include <linux/string.h>
 #include <linux/list.h>
 
 #else
@@ -169,6 +170,7 @@ static inline long PTR_ERR(const void *ptr) { // include/linux/err.h
 #define CINQ_MAGIC 0x3122
 #define FILE_HASH_WIDTH 16 // bytes
 #define MAX_NAME_LEN 255 // max value
+#define FS_DELIM "."
 
 #define META_FS ((void *)-EPERM)
 

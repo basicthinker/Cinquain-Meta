@@ -16,14 +16,14 @@
 // Used to prevent cyclic path in tree.
 static inline int fsnode_ancestor_(struct cinq_fsnode *ancestor,
                                   struct cinq_fsnode *descendant) {
-  while (descendant->fs_parent) {
+  while (descendant != META_FS) {
     descendant = descendant->fs_parent;
     if (descendant == ancestor) return 1;
   }
   return 0;
 }
 
-struct cinq_fsnode *fsnode_new(const char *name, struct cinq_fsnode *parent) {
+struct cinq_fsnode *fsnode_new(struct cinq_fsnode *parent, const char *name) {
   
   struct cinq_fsnode *fsnode = fsnode_malloc_();
   fsnode->fs_id = (unsigned long)fsnode;
@@ -46,7 +46,7 @@ struct cinq_fsnode *fsnode_new(const char *name, struct cinq_fsnode *parent) {
   cfs_add_(&file_systems, fsnode);
   write_unlock(&file_systems.lock);
   
-  if (parent) {
+  if (parent != META_FS) {
     write_lock(&parent->fs_children_lock);
     HASH_ADD_BY_PTR(fs_child, parent->fs_children, fs_id, fsnode);
     write_unlock(&parent->fs_children_lock);
@@ -64,7 +64,7 @@ void fsnode_evict(struct cinq_fsnode *fsnode) {
   
   cfs_rm_syn(&file_systems, fsnode);
   
-  if (fsnode->fs_parent) {
+  if (fsnode->fs_parent != META_FS) {
     write_lock(&fsnode->fs_parent->fs_children_lock);
     HASH_DELETE(fs_child, fsnode->fs_parent->fs_children, fsnode);
     write_unlock(&fsnode->fs_parent->fs_children_lock);
@@ -84,7 +84,7 @@ void fsnode_evict_all(struct cinq_fsnode *fsnode) {
 
 void fsnode_move(struct cinq_fsnode *child,
                  struct cinq_fsnode *new_parent) {
-  if (fsnode_ancestor_(child, new_parent)) {
+  if (unlikely(fsnode_ancestor_(child, new_parent))) {
     DEBUG_("[Error@fsnode_change_parent] change fsnode %s's parent to %s.\n",
            child->fs_name, new_parent->fs_name);
     return;
@@ -95,9 +95,11 @@ void fsnode_move(struct cinq_fsnode *child,
 
   child->fs_parent = new_parent; // supposed to be atomic
   
-  write_lock(&new_parent->fs_children_lock);
-  HASH_ADD_BY_PTR(fs_child, new_parent->fs_children, fs_id, child);
-  write_unlock(&new_parent->fs_children_lock);
+  if (new_parent != META_FS) {
+    write_lock(&new_parent->fs_children_lock);
+    HASH_ADD_BY_PTR(fs_child, new_parent->fs_children, fs_id, child);
+    write_unlock(&new_parent->fs_children_lock);
+  }
 }
 
 void fsnode_bridge(struct cinq_fsnode *out) {

@@ -24,7 +24,7 @@
 #define CREATE_THR_NUM_ 8 // number of threads for rand_creat_ln_rm
 
 static void print_fs_tree_(const int depth, const int no,
-                          struct cinq_fsnode *root) {
+                           struct cinq_fsnode *root) {
   int i;
   for (i = 0; i < depth; ++i) {
     fprintf(stdout, "  ");
@@ -56,7 +56,7 @@ static void print_dir_tree_(const int depth, const int no,
   struct cinq_tag *cur, *tmp;
   HASH_ITER(hh, root->ci_tags, cur, tmp) {
     if (cur->t_fs == META_FS) {
-      fprintf(stdout, " ROOT_TAG ");
+      fprintf(stdout, " META_FS");
     } else {
       fprintf(stdout, " %s ", cur->t_fs->fs_name);
     }
@@ -77,17 +77,32 @@ static inline void print_dir_tree(struct cinq_inode *root) {
   print_dir_tree_(0, 1, root);
 }
 
-static void make_fs_tree(struct cinq_fsnode *root) {
-  // make two-layer file-system tree
-  int i, j;
+static void make_fs_tree(struct dentry *droot) {
+  struct inode *iroot = droot->d_inode;
+  int mode = S_IFDIR;
+  struct dentry *dent;
+
+  // make file-system tree by invoking cinq_mkdir
   char sub[MAX_NAME_LEN + 1];
+  sprintf(sub, "META_FS.0_0_0"); // unique name and relation
+  struct qstr dname = { .name = (unsigned char *)sub, .len = strlen(sub) };
+  dent = d_alloc(droot, &dname);
+  iroot->i_op->mkdir(iroot, dent, mode);
+  
+  int i, j;
   for (i = 1; i <= FS_CHILDREN_; ++i) {
-    sprintf(sub, "0_%x_0", i); // produces unique name
-    struct cinq_fsnode *child = fsnode_new(sub, root);
+    sprintf(sub, "0_0_0.0_%x_0", i); // unique name and relation
+    struct qstr dname = { .name = (unsigned char *)sub, .len = strlen(sub) };
+    dent = d_alloc(droot, &dname);
+    iroot->i_op->mkdir(iroot, dent, mode);
+    
     for (j = 1; j <= FS_CHILDREN_; ++j) {
       char subsub[MAX_NAME_LEN + 1];
-      sprintf(subsub, "0_%x_%x", i, j); // produces unique name
-      fsnode_new(subsub, child);
+      sprintf(subsub, "0_%x_0.0_%x_%x", i, i, j); // unique name and relation
+      struct qstr dname = { .name = (unsigned char *)subsub,
+                            .len = strlen(subsub) };
+      dent = d_alloc(droot, &dname);
+      iroot->i_op->mkdir(iroot, dent, mode);
     }
   }
 }
@@ -481,51 +496,41 @@ static void *rand_sym(void *droot) {
 }
 
 int main(int argc, const char * argv[]) {
-  struct cinq_fsnode *fsroot = fsnode_new("0_0_0", NULL);
+  // Start point
+  struct dentry *meta_dent = cinqfs.mount((struct file_system_type *)&cinqfs,
+                                       0, NULL, NULL);
   
   // Constructs a basic balanced file system tree
-  make_fs_tree(fsroot);
   fprintf(stdout, "\nConstruct a file system tree:\n");
-  print_fs_tree(fsroot);
+  make_fs_tree(meta_dent);
   
-  
+  struct cinq_fsnode *root_fs = cfs_find_syn(&file_systems, "0_0_0");
+  print_fs_tree(root_fs);
+
   /* The following two steps simulate the process of file system update. */
   // Moves a subtree
-  struct cinq_fsnode *extra = fsnode_new("extra", fsroot);
-  fsnode_move(fsroot->fs_children, extra); // moves its first child
-  fprintf(stdout, "\nAfter adding 'extra' and moving:\n");
-  print_fs_tree(fsroot);
-  fprintf(stderr, "\nTry wrong operation. \n"
-          "(with error message if using -DCINQ_DEBUG)\n");
-  fsnode_move(fsroot, extra); // try invalid operation
-  
-  // Bridges the extra created above.
-  fprintf(stdout, "\nCross out 'extra':\n");
-  fsnode_bridge(extra);
-  print_fs_tree(fsroot);
-  
-  
-  // Prepare cnode tree
-  struct dentry *droot = cinqfs.mount((struct file_system_type *)&cinqfs,
-                                       0, NULL, NULL);
-  struct inode *iroot = droot->d_inode;
-  // Register file systems by making first-level directories
-  struct cinq_fsnode *fs;
-  int mode = (CINQ_MERGE << CINQ_MODE_SHIFT) | S_IFDIR;
-  for (fs = file_systems.fs_table; fs != NULL; fs = fs->fs_member.next) {
-    struct qstr dname = { .name = (unsigned char *)fs->fs_name,
-                          .len = strlen(fs->fs_name) };
-    struct dentry *den = d_alloc(NULL, &dname);
-    den->d_fsdata = (void *)fs->fs_id;
-    iroot->i_op->mkdir(iroot, den, mode); // first parameter is root inode.
-  }
-  fprintf(stdout, "\nAfter file system registeration:\n");
-  print_dir_tree(i_cnode(iroot));
+//  struct cinq_fsnode *extra = fsnode_new(root_fs, "extra");
+//  fsnode_move(root_fs->fs_children, extra); // moves its first child
+//  fprintf(stdout, "\nAfter adding 'extra' and moving:\n");
+//  print_fs_tree(root_fs);
+//  fprintf(stderr, "\nTry wrong operation. \n"
+//          "(with error message if using -DCINQ_DEBUG)\n");
+//  fsnode_move(root_fs, extra); // try invalid operation
+//  
+//  // Bridges the extra created above.
+//  fprintf(stdout, "\nCross out 'extra':\n");
+//  fsnode_bridge(extra);
+//  print_fs_tree(root_fs);
+
+  struct cinq_inode *root_cnode = i_cnode(meta_dent->d_inode);
+  fprintf(stdout, "\nDir/file tree:\n");
+  print_dir_tree(root_cnode);
   
   // Generates balanced dir/file tree on each file system
   const int k_fsn = HASH_CNT(fs_member, file_systems.fs_table);
   pthread_t mkdir_t[k_fsn];
   memset(mkdir_t, 0, sizeof(mkdir_t));
+  struct cinq_fsnode *fs;
   int ti, err;
   for (ti = 0, fs = file_systems.fs_table; fs != NULL;
        ++ti, fs = fs->fs_member.next) {
@@ -538,13 +543,13 @@ int main(int argc, const char * argv[]) {
     err = pthread_join(mkdir_t[ti], &status);
     DEBUG_ON_(err, "[Error@main] error code of pthread_join: %d.\n", err);
   }
-  print_dir_tree(i_cnode(iroot));
+  print_dir_tree(root_cnode);
 
   fprintf(stdout, "\nTest lookup:\n");
   pthread_t lookup_thr[LOOKUP_THR_NUM_];
   memset(lookup_thr, 0, sizeof(lookup_thr));
   for (ti = 0; ti < LOOKUP_THR_NUM_; ++ti) {
-    err = pthread_create(&lookup_thr[ti], NULL, rand_lookup, droot);
+    err = pthread_create(&lookup_thr[ti], NULL, rand_lookup, meta_dent);
     DEBUG_ON_(err, "[Error@main] error code of pthread_create: %d.\n", err);
   }
   for (ti = 0; ti < LOOKUP_THR_NUM_; ++ti) {
@@ -556,7 +561,7 @@ int main(int argc, const char * argv[]) {
   pthread_t create_thr[CREATE_THR_NUM_];
   memset(create_thr, 0, sizeof(create_thr));
   for (ti = 0; ti < CREATE_THR_NUM_; ++ti) {
-    err = pthread_create(&create_thr[ti], NULL, rand_create_ln_rm, droot);
+    err = pthread_create(&create_thr[ti], NULL, rand_create_ln_rm, meta_dent);
     DEBUG_ON_(err, "[Error@main] error code of pthread_create: %d.\n", err);
   }
   for (ti = 0; ti < CREATE_THR_NUM_; ++ti) {
@@ -568,7 +573,7 @@ int main(int argc, const char * argv[]) {
   pthread_t sym_thr[CREATE_THR_NUM_];
   memset(sym_thr, 0, sizeof(sym_thr));
   for (ti = 0; ti < CREATE_THR_NUM_; ++ti) {
-    err = pthread_create(&sym_thr[ti], NULL, rand_sym, droot);
+    err = pthread_create(&sym_thr[ti], NULL, rand_sym, meta_dent);
     DEBUG_ON_(err, "[Error@main] error code of pthread_create: %d.\n", err);
   }
   for (ti = 0; ti < CREATE_THR_NUM_; ++ti) {
@@ -580,8 +585,8 @@ int main(int argc, const char * argv[]) {
   int max_inode_num = atomic_read(&num_inode_);
   
   // Kill file systems
-  cinqfs.kill_sb(droot->d_sb);
-  fsnode_evict_all(fsroot);
+  fsnode_evict_all(root_fs); // TODO: incorporated to the following
+  cinqfs.kill_sb(meta_dent->d_sb);
   
   // Show results
   int expected_num = NUM_LOOKUP_ * LOOKUP_THR_NUM_;

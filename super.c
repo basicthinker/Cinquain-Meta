@@ -39,11 +39,13 @@ static int cinq_fill_super_(struct super_block *sb, void *data, int silent) {
 	}
   
 	root = d_alloc_root(inode);
-  sb->s_root = root;
   if (!root) {
     cnode_evict_all(i_cnode(inode));
     return -ENOMEM;
 	}
+  root->d_fsdata = META_FS;
+  sb->s_root = root;
+  
   return 0;
 }
 
