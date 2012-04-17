@@ -131,10 +131,6 @@ static inline struct cinq_fsnode *i_fs(const struct inode *inode) {
   return i_tag(inode)->t_fs;
 }
 
-static inline struct cinq_fsnode *d_fs(const struct dentry *dentry) {
-  return i_tag(dentry->d_inode)->t_fs;
-}
-
 static inline int negative(const struct cinq_tag *tag) {
   return tag->t_inode == NULL;
 }

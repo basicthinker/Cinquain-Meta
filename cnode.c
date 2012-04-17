@@ -411,9 +411,9 @@ static int cinq_mkinode_(struct inode *dir, struct dentry *dentry, int mode) {
 // Refer to definition comments in cinq-meta.h
 int cinq_create(struct inode *dir, struct dentry *dentry,
                 int mode, struct nameidata *nameidata) {
-  if (nameidata) {
-    dentry->d_fsdata = nameidata->path.dentry->d_fsdata;
-  } else if (!dentry->d_fsdata) {
+  dentry->d_fsdata = nameidata ?
+      nameidata->path.dentry->d_fsdata : dentry->d_parent->d_fsdata;
+  if (!dentry->d_fsdata) {
     DEBUG_("[Error@cinq_create] no fsnode is specified.\n");
     return -EINVAL;
   }
@@ -422,6 +422,7 @@ int cinq_create(struct inode *dir, struct dentry *dentry,
 
 int cinq_symlink(struct inode *dir, struct dentry *dentry,
                  const char *symname) {
+  dentry->d_fsdata = dentry->d_parent->d_fsdata;
   if (unlikely(!dentry->d_fsdata)) {
     DEBUG_("[Error@cinq_symlink] no fsnode is specified.\n");
     return -EINVAL;
@@ -472,6 +473,7 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
       
       d_instantiate(dentry, iroot);
       child_fs->fs_root = dentry;
+      dentry->d_fsdata = child_fs;
       dir->i_mtime = dir->i_ctime = CURRENT_TIME;
       
       journal_inode(iroot, CREATE);
@@ -483,8 +485,8 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
     return 0;
   }
                
-  struct cinq_fsnode *fs = dentry->d_fsdata;
-  if (unlikely(!fs)) {
+  dentry->d_fsdata = dentry->d_parent->d_fsdata;
+  if (unlikely(!dentry->d_fsdata)) {
    DEBUG_("[Error@cinq_mkdir] null fsnode for %s under dir %lx.\n",
           dentry->d_name.name, dir->i_ino);
    return -EINVAL;
@@ -607,6 +609,7 @@ int cinq_link(struct dentry *old_dentry, struct inode *dir,
   inc_nlink(inode);
   ihold(inode);
 	
+  dentry->d_fsdata = dentry->d_parent->d_fsdata;
   int err = cinq_tag_with_(dir, dentry, inode);
   if (!err) {
     d_instantiate(dentry, inode);
@@ -619,7 +622,6 @@ int cinq_link(struct dentry *old_dentry, struct inode *dir,
 
 // Note that this parameter dentry should be an existing valid one,
 // slightly different from the convention.
-// As convention, the request fs should be specified via dentry->d_fsdata.
 int cinq_unlink(struct inode *dir, struct dentry *dentry) {
   struct inode *inode = dentry->d_inode;
   if (unlikely(!inode)) {
@@ -628,6 +630,7 @@ int cinq_unlink(struct inode *dir, struct dentry *dentry) {
     return -EINVAL;
   }
   struct cinq_inode *cnode = i_cnode(inode);
+  if (!dentry->d_fsdata) dentry->d_fsdata = dentry->d_parent->d_fsdata;
   struct cinq_fsnode *req_fs = dentry->d_fsdata;
 
   struct cinq_tag *tag;
@@ -678,6 +681,7 @@ static int cinq_empty_dir_(struct cinq_inode *dir_cnode,
 
 int cinq_rmdir(struct inode *dir, struct dentry *dentry) {
   struct inode *inode = dentry->d_inode;
+  if (!dentry->d_fsdata) dentry->d_fsdata = dentry->d_parent->d_fsdata;
   struct cinq_fsnode *req_fs = dentry->d_fsdata;
   
   if (!cinq_empty_dir_(i_cnode(inode), req_fs)) {

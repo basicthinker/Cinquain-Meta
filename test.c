@@ -126,8 +126,7 @@ static void *make_dir_tree(void *fsnode) {
     struct qstr dname =                // new dir name passed via dentry
         { .name = (unsigned char *)buffer, .len = strlen(buffer) };
     struct dentry *den = d_alloc(root, &dname);
-    den->d_fsdata = (void *)fs->fs_id; // which client fs takes the operation
-    
+
     // (2) invoke cinq_mkdir
     if (dir->i_op->mkdir(dir, den, mode)) {
       DEBUG_("[Error@make_dir_tree] failed to make dir '%s' by fs %lx(%s).\n",
@@ -141,7 +140,6 @@ static void *make_dir_tree(void *fsnode) {
       struct qstr dname =
           { .name = (unsigned char *)buffer, .len = strlen(buffer) };
       struct dentry *subden = d_alloc(den, &dname);
-      subden->d_fsdata = (void *)fs->fs_id;
       if (subdir->i_op->mkdir(subdir, subden, mode)) {
         DEBUG_("[Error@make_dir_tree] failed to make sub-dir '%s'"
                " by fs %lx(%s).\n", buffer, fs->fs_id, fs->fs_name);
@@ -154,7 +152,6 @@ static void *make_dir_tree(void *fsnode) {
         struct qstr dname = 
             { .name = (unsigned char *)buffer, .len = strlen(buffer) };
         struct dentry *subsubden = d_alloc(subden, &dname);
-        subsubden->d_fsdata = (void *)fs->fs_id;
         if (subsubdir->i_op->mkdir(subsubdir, subsubden, mode)) {
           DEBUG_("[Error@make_dir_tree] failed to make sub-sub-dir '%s' "
                  "by fs %lx(%s).\n", buffer, fs->fs_id, fs->fs_name);
@@ -198,7 +195,6 @@ static struct dentry *do_lookup_(struct dentry *droot,
 static spinlock_t lookup_num_lock_;
 static int lookup_ok_cnt = 0;
 
-// Includes example for invoking cinq_create
 static void *rand_lookup(void *droot) {
   // randomly choose client file system
   char fs_name[MAX_NAME_LEN + 1];
@@ -236,7 +232,7 @@ static void *rand_lookup(void *droot) {
       }
     } else { // successful lookup
       pass = 0;
-      char *cur_fs_name = d_fs(found_dent)->fs_name;
+      char *cur_fs_name = i_fs(found_dent->d_inode)->fs_name;
       if (strcmp(fs_name, cur_fs_name)) { // not identical
         // when ancestor is used
         if (fs_j > dir_j) { // root file system should be used
@@ -256,7 +252,7 @@ static void *rand_lookup(void *droot) {
     }
     fprintf(stdout, "%s finds %s\t->\t%s\t%s\n",
             fs_name, dir[k_num_seg - 1], 
-            found_dent ? d_fs(found_dent)->fs_name : "-",
+            found_dent ? i_fs(found_dent->d_inode)->fs_name : "-",
             pass ? "OK" : "WRONG");
     if (pass) ++num_ok;
   } // for
@@ -306,7 +302,7 @@ static void *rand_create_ln_rm(void *droot) {
     // Dentry cache should be firstly used in practice.
     
     struct dentry* const dir_dent = do_lookup_(droot, (void *)dir, k_num_seg);
-    if (!dir_dent || strcmp(fs_name, d_fs(dir_dent)->fs_name) == 0)
+    if (!dir_dent || strcmp(fs_name, i_fs(dir_dent->d_inode)->fs_name) == 0)
       continue;
     
     ++num_create_test;
@@ -319,10 +315,6 @@ static void *rand_create_ln_rm(void *droot) {
     const struct qstr q_file_name =
         { .name = (unsigned char *)file_name, .len = strlen(file_name) };
     struct dentry* const file_dent = d_alloc(dir_dent, &q_file_name);
-    // The fsnode can be determined by various ways.
-    // Note that this is who takes the operation,
-    // NOT always be d_fs(dir_dent) who can be an ancestor fs.
-    file_dent->d_fsdata = req_fs;
     
     if (dir_inode->i_op->create(dir_inode, file_dent, mode, NULL)) {
       DEBUG_("[Error@rand_create_ln_rm] failed to create %s@%s.\n",
@@ -337,8 +329,7 @@ static void *rand_create_ln_rm(void *droot) {
     const struct qstr q_link_name =
         { .name = (unsigned char *)link_name, .len = strlen(link_name) };
     struct dentry* const link_dent = d_alloc(dir_dent, &q_link_name);
-    link_dent->d_fsdata = req_fs;
-    
+
     if (dir_inode->i_op->link(file_dent, dir_inode, link_dent)) {
       DEBUG_("[Error@rand_create_ln_rm] failed to link to %s@%s.\n",
              file_name, i_cnode(dir_inode)->ci_name);
@@ -352,11 +343,11 @@ static void *rand_create_ln_rm(void *droot) {
     memcpy(dir_file, dir, sizeof(dir));
     sprintf(dir_file[k_num_seg], "%s", file_name);
     struct dentry *d_file = do_lookup_(droot, (void *)dir_file, k_num_seg + 1);
-    if (!d_file || d_fs(d_file) != req_fs) {
+    if (!d_file || i_fs(d_file->d_inode) != req_fs) {
       pass = 0;
     }
     fprintf(stdout, "cinq_create: %s(%s)@%s(%s)\t%s\n",
-            file_name, d_file ? d_fs(d_file)->fs_name : "-",
+            file_name, d_file ? i_fs(d_file->d_inode)->fs_name : "-",
             dir[k_num_seg - 1], fs_name,
             pass ? "OK" : "WRONG");
     if (pass) ++num_create_ok;
@@ -440,7 +431,6 @@ static void *rand_sym(void *droot) {
   const int fs_j = rand() % FS_CHILDREN_ + 1;
   const int fs_k = rand() % (FS_CHILDREN_ + 1);
   sprintf(fs_name, "0_%x_%x", fs_j, fs_k);
-  struct cinq_fsnode *req_fs = cfs_find_syn(&file_systems, fs_name);
   
   const int k_num_seg = 4;
   char dir[k_num_seg][MAX_NAME_LEN + 1];
@@ -457,7 +447,7 @@ static void *rand_sym(void *droot) {
     sprintf(dir[3], "%s.%x", dir[2], dir_k);
     
     struct dentry* const dir_dent = do_lookup_(droot, (void *)dir, k_num_seg);
-    if (!dir_dent || strcmp(fs_name, d_fs(dir_dent)->fs_name) == 0) {
+    if (!dir_dent || strcmp(fs_name, i_fs(dir_dent->d_inode)->fs_name) == 0) {
       continue;
     }
     struct inode* const dir_inode = dir_dent->d_inode;
@@ -471,7 +461,6 @@ static void *rand_sym(void *droot) {
     const struct qstr q_file_name =
         { .name = (unsigned char *)file_name, .len = strlen(file_name) };
     struct dentry* const file_dent = d_alloc(dir_dent, &q_file_name);
-    file_dent->d_fsdata = req_fs;
     int err;
     err = dir_inode->i_op->symlink(dir_inode, file_dent, symname);
     if (err) {
