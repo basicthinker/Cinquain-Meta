@@ -66,13 +66,13 @@ enum cinq_visibility {
 
 struct cinq_file_systems {
   rwlock_t lock;
-  struct cinq_fsnode *fs_table;
+  struct cinq_fsnode *cfs_table;
 };
 
 static inline struct cinq_fsnode *cfs_find_(struct cinq_file_systems *table,
                                             const char *name) {
   struct cinq_fsnode *fsnode;
-  HASH_FIND_BY_STR(fs_member, table->fs_table, name, fsnode);
+  HASH_FIND_BY_STR(fs_member, table->cfs_table, name, fsnode);
   return fsnode;
 }
 
@@ -86,7 +86,7 @@ static inline struct cinq_fsnode *cfs_find_syn(struct cinq_file_systems *table,
 
 static inline void cfs_add_(struct cinq_file_systems *table,
                             struct cinq_fsnode *fs) {
-  HASH_ADD_BY_STR(fs_member, table->fs_table, fs_name, fs);
+  HASH_ADD_BY_STR(fs_member, table->cfs_table, fs_name, fs);
 }
 
 static inline void cfs_add_syn(struct cinq_file_systems *table,
@@ -98,7 +98,7 @@ static inline void cfs_add_syn(struct cinq_file_systems *table,
 
 static inline void cfs_rm_(struct cinq_file_systems *table,
                            struct cinq_fsnode *fs) {
-  HASH_DELETE(fs_member, table->fs_table, fs);
+  HASH_DELETE(fs_member, table->cfs_table, fs);
 }
 
 static inline void cfs_rm_syn(struct cinq_file_systems *table,

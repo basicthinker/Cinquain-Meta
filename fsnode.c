@@ -73,6 +73,14 @@ void fsnode_evict(struct cinq_fsnode *fsnode) {
 }
 
 void fsnode_evict_all(struct cinq_fsnode *fsnode) {
+  if (fsnode == META_FS) {
+    struct cinq_fsnode *cur, *tmp;
+    HASH_ITER(fs_member, file_systems.cfs_table, cur, tmp) {
+      if (cur->fs_parent == META_FS) fsnode_evict_all(cur);
+    }
+    return;
+  }
+  
   if (fsnode->fs_children) {
     struct cinq_fsnode *cur, *tmp;
     HASH_ITER(fs_child, fsnode->fs_children, cur, tmp) {

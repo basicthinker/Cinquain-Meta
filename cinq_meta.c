@@ -14,7 +14,7 @@
 
 struct cinq_file_systems file_systems = {
   .lock = RW_LOCK_UNLOCKED,
-  .fs_table = NULL
+  .cfs_table = NULL
 };
 
 const struct file_system_type cinqfs = {

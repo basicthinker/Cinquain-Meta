@@ -377,7 +377,6 @@ struct file {
 struct super_operations {
   struct inode *(*alloc_inode)(struct super_block *sb);
 	void (*destroy_inode)(struct inode *);
-  
   void (*dirty_inode) (struct inode *);
 	int (*write_inode) (struct inode *, struct writeback_control *wbc);
 	int (*drop_inode) (struct inode *);
@@ -553,6 +552,11 @@ static inline void destroy_inode(struct inode *inode) {
   // __destroy_inode(inode);
   inode->i_sb->s_op->destroy_inode(inode);
   // call_rcu(&inode->i_rcu, i_callback);
+}
+
+static inline void ihold(struct inode *inode) {
+  DEBUG_ON_(atomic_inc_return(&inode->i_count) < 2,
+            "[Warn@ihold] caller must already hold a reference.");
 }
 
 /**

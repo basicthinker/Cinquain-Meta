@@ -15,12 +15,12 @@
 #include "cinq_meta.h"
 
 /* Test config */
-#define FS_CHILDREN_ 3
-#define CNODE_CHILDREN_ 5 // should be larger than FS_CHILDREN_
+#define FS_CHILDREN_ 4
+#define CNODE_CHILDREN_ 6 // should be larger than FS_CHILDREN_
 
-#define NUM_LOOKUP_ 50
+#define NUM_LOOKUP_ 100
 #define LOOKUP_THR_NUM_ 8 // number of threads for rand_lookup
-#define NUM_CREATE_ 10
+#define NUM_CREATE_ 50
 #define CREATE_THR_NUM_ 8 // number of threads for rand_creat_ln_rm
 
 static void print_fs_tree_(const int depth, const int no,
@@ -179,7 +179,6 @@ static struct dentry *do_lookup_(struct dentry *droot,
     struct qstr dname =
         { .name = (unsigned char *)seg[i], .len = strlen(seg[i]) };
     struct dentry *subden = d_alloc(den, &dname);
-    subden->d_fsdata = den->d_fsdata;
     
     // (4) invoke cinq_lookup
     inode->i_op->lookup(inode, subden, NULL);
@@ -527,12 +526,12 @@ int main(int argc, const char * argv[]) {
   print_dir_tree(root_cnode);
   
   // Generates balanced dir/file tree on each file system
-  const int k_fsn = HASH_CNT(fs_member, file_systems.fs_table);
+  const int k_fsn = HASH_CNT(fs_member, file_systems.cfs_table);
   pthread_t mkdir_t[k_fsn];
   memset(mkdir_t, 0, sizeof(mkdir_t));
   struct cinq_fsnode *fs;
   int ti, err;
-  for (ti = 0, fs = file_systems.fs_table; fs != NULL;
+  for (ti = 0, fs = file_systems.cfs_table; fs != NULL;
        ++ti, fs = fs->fs_member.next) {
     err = pthread_create(&mkdir_t[ti], NULL, make_dir_tree, fs);
     DEBUG_ON_(err, "[Error@main] error code of pthread_create: %d.\n", err);
@@ -585,7 +584,6 @@ int main(int argc, const char * argv[]) {
   int max_inode_num = atomic_read(&num_inode_);
   
   // Kill file systems
-  fsnode_evict_all(root_fs); // TODO: incorporated to the following
   cinqfs.kill_sb(meta_dent->d_sb);
   
   // Show results

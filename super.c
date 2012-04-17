@@ -64,6 +64,7 @@ void cinq_kill_sb(struct super_block *sb) {
       sleep(1);
     }
     thread_stop(&journal_thread);
+    fsnode_evict_all(META_FS);
     d_genocide(sb->s_root);
     cnode_evict_all(i_cnode(sb->s_root->d_inode));
     dput(sb->s_root); // cancel the extra reference and delete
