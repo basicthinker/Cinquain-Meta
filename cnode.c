@@ -34,6 +34,7 @@ static inline struct cinq_tag *tag_new_with_(const struct cinq_fsnode *fs,
   tag->t_mode = mode;
   tag->t_host = NULL;
   atomic_set(&tag->t_nchild, 0);
+  tag->t_symname = NULL;
   return tag;
 }
 
@@ -368,7 +369,8 @@ struct inode *cnode_make_tree(struct super_block *sb) {
   return iroot;
 }
 
-static int cinq_mkinode_(struct inode *dir, struct dentry *dentry, int mode) {
+static int cinq_mkinode_(struct inode *dir, struct dentry *dentry,
+                         int mode, struct inode *inode) {
   struct cinq_inode *parent = i_cnode(dir);
   struct cinq_inode *child;
   struct cinq_tag *tag;
@@ -378,6 +380,15 @@ static int cinq_mkinode_(struct inode *dir, struct dentry *dentry, int mode) {
   if (dentry->d_name.len > MAX_NAME_LEN) {
     DEBUG_("[Error@cinq_mkdir] name is too long: %s\n", name);
     return -ENAMETOOLONG;
+  }
+  
+  if (!inode) {
+    inode = cinq_get_inode_(dir, mode);
+  } else {
+    ihold(inode);
+  }
+  if (unlikely(!inode)) {
+    return -ENOSPC;
   }
   
   write_lock(&parent->ci_children_lock);
@@ -393,8 +404,6 @@ static int cinq_mkinode_(struct inode *dir, struct dentry *dentry, int mode) {
       wr_release_return(&child->ci_tags_lock, -EINVAL);
     }
     
-    struct inode *inode = cinq_get_inode_(dir, mode);
-    if (!inode) wr_release_return(&child->ci_tags_lock, -ENOSPC);
     tag = tag_new_(req_fs, mode >> CINQ_MODE_SHIFT, inode);
     if (!tag) {
       iput(inode);
@@ -408,8 +417,6 @@ static int cinq_mkinode_(struct inode *dir, struct dentry *dentry, int mode) {
   } else {
     child = cnode_new_(name);
     if (unlikely(!child)) wr_release_return(&parent->ci_children_lock, -ENOSPC);
-    struct inode *inode = cinq_get_inode_(dir, mode);
-    if (unlikely(!inode)) wr_release_return(&parent->ci_children_lock, -ENOSPC);
     tag = tag_new_(req_fs, mode >> CINQ_MODE_SHIFT, inode);
     if (unlikely(!tag)) {
       iput(inode);
@@ -441,7 +448,7 @@ int cinq_create(struct inode *dir, struct dentry *dentry,
     DEBUG_("[Error@cinq_create] no fsnode is specified.\n");
     return -EINVAL;
   }
-  return cinq_mkinode_(dir, dentry, mode | S_IFREG);
+  return cinq_mkinode_(dir, dentry, mode | S_IFREG, NULL);
 }
 
 int cinq_symlink(struct inode *dir, struct dentry *dentry,
@@ -452,7 +459,7 @@ int cinq_symlink(struct inode *dir, struct dentry *dentry,
     return -EINVAL;
   }
   
-  int err = cinq_mkinode_(dir, dentry, S_IFLNK | S_IRWXUGO);
+  int err = cinq_mkinode_(dir, dentry, S_IFLNK | S_IRWXUGO, NULL);
   if (!err) {
     struct inode *inode = dentry->d_inode;
     struct cinq_tag *tag = i_tag(inode);
@@ -516,7 +523,7 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
    return -EINVAL;
   }
   // journal_inode(dir, UPDATE);
-  return cinq_mkinode_(dir, dentry, mode | S_IFDIR);
+  return cinq_mkinode_(dir, dentry, mode | S_IFDIR, NULL);
 }
 
 static inline struct inode *cinq_lookup_(const struct inode *dir,
@@ -721,30 +728,62 @@ void *cinq_follow_link(struct dentry *dentry, struct nameidata *nd) {
 
 int cinq_rename(struct inode *old_dir, struct dentry *old_dentry,
                 struct inode *new_dir, struct dentry *new_dentry) {
-  new_dentry->d_fsdata = new_dentry->d_parent->d_fsdata;
-  if (unlikely(!new_dentry->d_fsdata)) {
-    DEBUG_("[Error@cinq_rename] no fsnode is specified when moving %s\n",
-           i_cnode(old_dentry->d_inode)->ci_name);
-    return -EINVAL;
-  }
+//  new_dentry->d_fsdata = new_dentry->d_parent->d_fsdata;
+//  if (unlikely(!new_dentry->d_fsdata)) {
+//    DEBUG_("[Error@cinq_rename] no fsnode is specified when moving %s\n",
+//           i_cnode(old_dentry->d_inode)->ci_name);
+//    return -EINVAL;
+//  }
+//  
+//  struct inode *new_inode = new_dentry->d_inode;
+//  int err;
+//  if (new_inode) {
+//    cinq_unlink(new_dir, new_dentry);
+//  }
+//  err = cinq_mkinode_(new_dir, new_dentry,
+//                      old_dentry->d_inode->i_mode, old_dentry->d_inode);
+//  if (!err) {
+//    cinq_unlink(old_dir, old_dentry);
+//  }
+//  return err;
+  return 0;
+}
+
+
+static inline int cinq_setsize_(struct inode *inode, loff_t newsize) {
+	int error;
   
-  struct inode *new_inode = new_dentry->d_inode;
-  int err;
-  if (new_inode) {
-    drop_nlink(new_inode);
-    
-    cinq_unlink(new_dir, new_dentry);
-  } else {
-    
-  }
-  err = cinq_tag_with_(new_dir, new_dentry, old_dentry->d_inode);
-  if (!err) {
-    local_inc_ref(new_dir, new_dentry);
-    cinq_unlink(old_dir, old_dentry);
-  }
-  return err;
+	if (!(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) ||
+        S_ISLNK(inode->i_mode)))
+		return -EINVAL;
+	if (i_tag(inode)->t_symname)
+		return -EINVAL;
+
+	if (error)
+		return error;
+  
+  inode->i_size = newsize;
+	inode->i_mtime = inode->i_ctime = CURRENT_TIME_SEC;
+	
+  journal_inode(inode, UPDATE);
+
+	return 0;
 }
 
 int cinq_setattr(struct dentry *dentry, struct iattr *attr) {
-  return 0;
+  struct inode *inode = dentry->d_inode;
+  int error;
+
+  error = inode_change_ok(inode, attr);
+  if (error)
+    return error;
+  
+  if (attr->ia_valid & ATTR_SIZE && attr->ia_size != inode->i_size) {
+    error = cinq_setsize_(inode, attr->ia_size);
+    if (error)
+      return error;
+  }
+  setattr_copy(inode, attr);
+  
+  return error;
 }

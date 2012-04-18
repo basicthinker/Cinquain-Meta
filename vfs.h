@@ -80,6 +80,29 @@
 
 #define I_DIRTY (I_DIRTY_SYNC | I_DIRTY_DATASYNC | I_DIRTY_PAGES)
 
+/* fs.h
+ * Attribute flags.  These should be or-ed together to figure out what
+ * has been changed!
+ */
+#define ATTR_MODE	(1 << 0)
+#define ATTR_UID	(1 << 1)
+#define ATTR_GID	(1 << 2)
+#define ATTR_SIZE	(1 << 3)
+#define ATTR_ATIME	(1 << 4)
+#define ATTR_MTIME	(1 << 5)
+#define ATTR_CTIME	(1 << 6)
+#define ATTR_ATIME_SET	(1 << 7)
+#define ATTR_MTIME_SET	(1 << 8)
+#define ATTR_FORCE	(1 << 9) /* Not a change, but a change it */
+#define ATTR_ATTR_FLAG	(1 << 10)
+#define ATTR_KILL_SUID	(1 << 11)
+#define ATTR_KILL_SGID	(1 << 12)
+#define ATTR_FILE	(1 << 13)
+#define ATTR_KILL_PRIV	(1 << 14)
+#define ATTR_OPEN	(1 << 15) /* Truncating from open(O_TRUNC) */
+#define ATTR_TIMES_SET	(1 << 16)
+
+
 struct qstr { // include/linux/dcache.h
   unsigned int hash;
   unsigned int len;
@@ -652,6 +675,62 @@ static int generic_readlink(struct dentry *dentry, char *buffer, int buflen)
 	if (dentry->d_inode->i_op->put_link)
 		dentry->d_inode->i_op->put_link(dentry, &nd, cookie);
 	return res;
+}
+
+
+/** fs/attr.c
+ * inode_change_ok - check if attribute changes to an inode are allowed
+ * @inode:	inode to check
+ * @attr:	attributes to change
+ *
+ * Check if we are allowed to change the attributes contained in @attr
+ * in the given inode.  This includes the normal unix access permission
+ * checks, as well as checks for rlimits and others.
+ *
+ * Should be called as the first thing in ->setattr implementations,
+ * possibly after taking additional locks.
+ */
+static inline int inode_change_ok(const struct inode *inode, struct iattr *attr)
+{
+	return 0;
+}
+
+/**
+ * setattr_copy - copy simple metadata updates into the generic inode
+ * @inode:	the inode to be updated
+ * @attr:	the new attributes
+ *
+ * setattr_copy must be called with i_mutex held.
+ *
+ * setattr_copy updates the inode's metadata with that specified
+ * in attr. Noticeably missing is inode size update, which is more complex
+ * as it requires pagecache updates.
+ *
+ * The inode is not marked as dirty after this operation. The rationale is
+ * that for "simple" filesystems, the struct inode is the inode storage.
+ * The caller is free to mark the inode dirty afterwards if needed.
+ */
+static inline void setattr_copy(struct inode *inode, const struct iattr *attr)
+{
+	unsigned int ia_valid = attr->ia_valid;
+  
+	if (ia_valid & ATTR_UID)
+		inode->i_uid = attr->ia_uid;
+	if (ia_valid & ATTR_GID)
+		inode->i_gid = attr->ia_gid;
+	if (ia_valid & ATTR_ATIME)
+		inode->i_atime = attr->ia_atime;
+	if (ia_valid & ATTR_MTIME)
+		inode->i_mtime = attr->ia_mtime;
+	if (ia_valid & ATTR_CTIME)
+		inode->i_ctime = attr->ia_ctime;
+	if (ia_valid & ATTR_MODE) {
+		umode_t mode = attr->ia_mode;
+    
+    //		if (!in_group_p(inode->i_gid) && !capable(CAP_FSETID))
+    //			mode &= ~S_ISGID;
+		inode->i_mode = mode;
+	}
 }
 
 #endif // __KERNEL__
