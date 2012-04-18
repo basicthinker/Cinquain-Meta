@@ -45,50 +45,6 @@ atomic_t num_inode_;
 #define DEBUG_(...)
 #endif // CINQ_DEBUG
 
-#ifdef __KERNEL__ // intended for Linux
-/* Kernel (exchangable) */
-
-
-#else
-/* User space (exchangable) */
-
-// include/linux/pagemap.h
-#define PAGE_CACHE_SHIFT        13 // 8KB
-#define PAGE_CACHE_SIZE         ((uint64_t)1 << PAGE_CACHE_SHIFT)
-#define PAGE_CACHE_MASK         (~(PAGE_SIZE - 1))
-
-#ifdef CINQ_DEBUG
-#define DEBUG_ON_(cond, ...) if (cond) { fprintf(stderr, __VA_ARGS__); }
-#define DEBUG_(...) (fprintf(stderr, __VA_ARGS__))
-#endif // CINQ_DEBUG
-
-#define inode_free_(p) (free(p))
-
-#define fsnode_malloc_() \
-    ((struct cinq_fsnode *)malloc(sizeof(struct cinq_fsnode)))
-#define fsnode_free_(p) (free(p))
-
-#define tag_malloc_() \
-    ((struct cinq_tag *)malloc(sizeof(struct cinq_tag)))
-#define tag_free_(p) (free(p))
-
-#define cnode_malloc_() \
-    ((struct cinq_inode *)malloc(sizeof(struct cinq_inode)))
-#define cnode_free_(p) (free(p))
-
-#define journal_malloc_() \
-    ((struct cinq_journal *)malloc(sizeof(struct cinq_journal)))
-#define journal_free_(p) (free(p))
-
-#define journal_entry_malloc_() \
-    ((struct journal_entry *)malloc(sizeof(struct journal_entry)))
-#define journal_entry_free_(p) (free(p))
-
-#define kmalloc(n) malloc(n)
-
-#define CURRENT_TIME ((struct timespec) { time(NULL), 0 })
-
-#endif // __KERNEL__
 
 
 #ifndef __KERNEL__
@@ -162,6 +118,53 @@ static inline long PTR_ERR(const void *ptr) { // include/linux/err.h
 #define MAX_NESTED_LINKS 6
 
 #endif // __KERNEL__
+
+
+#ifdef __KERNEL__ // intended for Linux
+/* Kernel (exchangable) */
+
+
+#else
+/* User space (exchangable) */
+
+// include/linux/pagemap.h
+#define PAGE_CACHE_SHIFT        13 // 8KB
+#define PAGE_CACHE_SIZE         ((uint64_t)1 << PAGE_CACHE_SHIFT)
+#define PAGE_CACHE_MASK         (~(PAGE_SIZE - 1))
+
+#ifdef CINQ_DEBUG
+#define DEBUG_ON_(cond, ...) if (unlikely(cond)) { fprintf(stderr, __VA_ARGS__); }
+#define DEBUG_(...) (fprintf(stderr, __VA_ARGS__))
+#endif // CINQ_DEBUG
+
+#define inode_free_(p) (free(p))
+
+#define fsnode_malloc_() \
+    ((struct cinq_fsnode *)malloc(sizeof(struct cinq_fsnode)))
+#define fsnode_free_(p) (free(p))
+
+#define tag_malloc_() \
+    ((struct cinq_tag *)malloc(sizeof(struct cinq_tag)))
+#define tag_free_(p) (free(p))
+
+#define cnode_malloc_() \
+    ((struct cinq_inode *)malloc(sizeof(struct cinq_inode)))
+#define cnode_free_(p) (free(p))
+
+#define journal_malloc_() \
+    ((struct cinq_journal *)malloc(sizeof(struct cinq_journal)))
+#define journal_free_(p) (free(p))
+
+#define journal_entry_malloc_() \
+    ((struct journal_entry *)malloc(sizeof(struct journal_entry)))
+#define journal_entry_free_(p) (free(p))
+
+#define kmalloc(n) malloc(n)
+
+#define CURRENT_TIME ((struct timespec) { time(NULL), 0 })
+
+#endif // __KERNEL__
+
 
 /* Non-portability utilities */
 

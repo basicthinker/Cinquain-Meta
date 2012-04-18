@@ -56,7 +56,6 @@ static inline void drop_nchild_(struct cinq_tag *tag) {
 
 static inline void tag_drop_inode_(struct cinq_tag *tag) {
   if (unlikely(!tag->t_inode)) return;
-  drop_nlink(tag->t_inode); // unspinned for possible deletion
   iput(tag->t_inode);
   tag->t_inode = NULL;
 }
@@ -208,8 +207,9 @@ static struct inode *cinq_get_inode_(const struct inode *dir, int mode) {
 }
 
 // Contrary to convention that derives childen from parent
-static void cnode_tag_ancestors_(const struct inode *child,
-                                 const struct cinq_fsnode *fs) {
+static void cnode_tag_ancestors_(const struct dentry *dentry) {
+  struct inode *child = dentry->d_inode;
+  struct cinq_fsnode *fs = dentry->d_fsdata;
   struct cinq_inode *ci_child = i_cnode(child);
   struct cinq_inode *ci_parent = ci_child->ci_parent;
   struct cinq_tag *tag;
@@ -263,20 +263,41 @@ static inline void tag_evict(struct cinq_tag *tag) {
   tag_free_(tag);
 }
 
-static inline void local_update(struct cinq_tag *dir_tag,
-                                struct inode *child,
-                                struct cinq_fsnode *req_fs) {
-  if (unlikely(i_cnode(child)->ci_parent != dir_tag->t_host)) {
-    DEBUG_("[Error@tag_inc_nchild] not parent and child: %s not under %s\n",
-           i_cnode(child)->ci_name, dir_tag->t_host->ci_name);
-  }
+static inline void local_inc_ref(struct inode *dir, struct dentry *dentry) {
+  struct cinq_tag *dir_tag = i_tag(dir);
+  struct inode *inode = dentry->d_inode;
+  struct cinq_fsnode *req_fs = dentry->d_fsdata;
+  DEBUG_ON_(i_cnode(inode)->ci_parent != dir_tag->t_host,
+            "[Error@tag_inc_nchild] not parent and child: %s not under %s\n",
+            i_cnode(inode)->ci_name, dir_tag->t_host->ci_name);
   if (dir_tag->t_fs != req_fs) {
-    cnode_tag_ancestors_(child, req_fs);
+    cnode_tag_ancestors_(dentry);
   } else {
     inc_nchild_(dir_tag);
-    if (S_ISDIR(child->i_mode)) {
+    if (S_ISDIR(inode->i_mode)) {
       inc_nlink(dir_tag->t_inode);
     }
+  }
+}
+
+static inline void local_drop_ref(struct inode *dir, struct dentry *dentry) {
+  struct cinq_tag *dir_tag = i_tag(dir);
+  struct inode *inode = dentry->d_inode;
+  struct cinq_fsnode *req_fs = dentry->d_fsdata;
+  DEBUG_ON_(i_cnode(inode)->ci_parent != dir_tag->t_host,
+            "[Error@tag_inc_nchild] not parent and child: %s not under %s\n",
+            i_cnode(inode)->ci_name, dir_tag->t_host->ci_name);
+  struct cinq_tag *tag;
+  if (dir_tag->t_fs != req_fs) {
+    tag = cnode_find_tag_syn(i_cnode(dir), req_fs);
+    DEBUG_ON_(!tag, "[Error@local_drop_ref] wild tag without parent: %s(%s)\n",
+              tag->t_host->ci_name, tag->t_fs->fs_name);
+  } else {
+    tag = dir_tag;
+  }
+  drop_nchild_(tag);
+  if (S_ISDIR(inode->i_mode)) {
+    drop_nlink(tag->t_inode);
   }
 }
 
@@ -304,17 +325,16 @@ void cnode_evict_all(struct cinq_inode *root) {
 
 // TODO
 void cinq_destroy_inode(struct inode *inode) {
-//  int empty_nlink = S_ISDIR(inode->i_mode) ? 1 : 0; // unspinned
+//  int empty_nlink = S_ISDIR(inode->i_mode) ? 2 : 1;
 //
 //#ifdef CINQ_DEBUG
-//    int count = atomic_read(&inode->i_count);
 //    int nchild = atomic_read(&i_tag(inode)->t_nchild);
-//    DEBUG_ON_(inode->i_nlink != empty_nlink || count || nchild,
-//              "[Info@cinq_destroy_inode] nlink=%d, count=%d, nchild=%d\n",
-//              inode->i_nlink, count, nchild);
+//    DEBUG_ON_(inode->i_nlink - empty_nlink != nchild,
+//              "[Info@cinq_destroy_inode] nlink=%d, empty_nlink=%d, nchild=%d\n",
+//              inode->i_nlink, empty_nlink, nchild);
 //#endif // CINQ_DEBUG
 //  
-//  if (inode->i_nlink == empty_nlink) {
+//  if (inode->i_nlink == empty_nlink && !nchild) {
 //    inode_free_(inode);
 //    
 //#ifdef CINQ_DEBUG
@@ -404,7 +424,7 @@ static int cinq_mkinode_(struct inode *dir, struct dentry *dentry, int mode) {
   dir->i_mtime = dir->i_ctime = CURRENT_TIME;
   // journal_inode(dir, UPDATE);
   
-  local_update(i_tag(dir), tag->t_inode, req_fs);
+  local_inc_ref(dir, dentry);
   return 0;
 }
 
@@ -556,7 +576,6 @@ static int cinq_tag_with_(struct inode *dir, struct dentry *dentry,
                           const struct inode *inode) {
   char *name = (char *)dentry->d_name.name;
   struct cinq_inode *dir_cnode = i_cnode(dir);
-  struct cinq_tag *dir_tag = i_tag(dir);
   struct cinq_fsnode *req_fs = dentry->d_fsdata;
   struct cinq_inode *child;
   struct cinq_tag *tag;
@@ -591,8 +610,6 @@ static int cinq_tag_with_(struct inode *dir, struct dentry *dentry,
     journal_cnode(child, CREATE);
     journal_cnode(dir_cnode, UPDATE);
   }
-
-  local_update(dir_tag, tag->t_inode, req_fs);
   return 0;
 }
 
@@ -613,6 +630,9 @@ int cinq_link(struct dentry *old_dentry, struct inode *dir,
   int err = cinq_tag_with_(dir, dentry, inode);
   if (!err) {
     d_instantiate(dentry, inode);
+    DEBUG_ON_(S_ISDIR(dentry->d_inode->i_mode),
+              "[Warn@cinq_link] link to dir.\n");
+    local_inc_ref(dir, dentry);
     return 0;
   }
   
@@ -635,28 +655,20 @@ int cinq_unlink(struct inode *dir, struct dentry *dentry) {
 
   struct cinq_tag *tag;
   write_lock(&cnode->ci_tags_lock);
-  int to_check_parent = 0;
+  int to_update_parent = 0;
   tag = cnode_find_tag_(cnode, req_fs);
   if (!tag) {
     tag = tag_new_with_(req_fs, CINQ_VISIBLE, NULL);
     if (unlikely(!tag)) wr_release_return(&cnode->ci_tags_lock, -ENOSPC);
     cnode_add_tag_(cnode, tag);
-  } else {
+  } else { // delete existing one
     tag_drop_inode_(tag);
-    to_check_parent = 1;
+    to_update_parent = 1;
   }
   write_unlock(&cnode->ci_tags_lock);
   
-  if (to_check_parent) {
-    tag = cnode_find_tag_syn(i_cnode(dir), req_fs);
-    if (tag) {
-      drop_nchild_(tag);
-      if (S_ISDIR(inode->i_mode)) {
-        drop_nlink(tag->t_inode);
-      }
-    } else {
-      DEBUG_("[Warn@cinq_unlink] tag should have parent: %s\n", cnode->ci_name);
-    }
+  if (to_update_parent) {
+    local_drop_ref(dir, dentry);
   }
 
   inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
@@ -704,6 +716,7 @@ void *cinq_follow_link(struct dentry *dentry, struct nameidata *nd) {
 
 int cinq_rename(struct inode *old_dir, struct dentry *old_dentry,
                 struct inode *new_dir, struct dentry *new_dentry) {
+  new_dentry->d_fsdata = new_dentry->d_parent->d_fsdata;
   if (unlikely(!new_dentry->d_fsdata)) {
     DEBUG_("[Error@cinq_rename] no fsnode is specified when moving %s\n",
            i_cnode(old_dentry->d_inode)->ci_name);
@@ -721,6 +734,7 @@ int cinq_rename(struct inode *old_dir, struct dentry *old_dentry,
   }
   err = cinq_tag_with_(new_dir, new_dentry, old_dentry->d_inode);
   if (!err) {
+    local_inc_ref(new_dir, new_dentry);
     cinq_unlink(old_dir, old_dentry);
   }
   return err;
