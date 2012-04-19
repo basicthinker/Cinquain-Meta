@@ -23,6 +23,7 @@
 #define NUM_CREATE_ 50
 #define CREATE_THR_NUM_ 8 // number of threads for rand_creat_ln_rm
 
+
 static void print_fs_tree_(const int depth, const int no,
                            struct cinq_fsnode *root) {
   int i;
@@ -46,6 +47,8 @@ static void print_fs_tree_(const int depth, const int no,
   }
 }
 
+// This function is only for test purpose.
+// User space never touches data structures in this function.
 static void print_dir_tree_(const int depth, const int no,
                             struct cinq_inode *root) {
   int i;
@@ -77,14 +80,17 @@ static inline void print_dir_tree(struct cinq_inode *root) {
   print_dir_tree_(0, 1, root);
 }
 
+// Includes examples for file system registration
 static void make_fs_tree(struct dentry *droot) {
   struct inode *iroot = droot->d_inode;
   int mode = S_IFDIR;
   struct dentry *dent;
 
   // make file-system tree by invoking cinq_mkdir
+  // Example for file system registration via cinq_mkdir().
+  // e.g. mkdir [parent_fs_name].[child_fs_name]
   char sub[MAX_NAME_LEN + 1];
-  sprintf(sub, "META_FS.0_0_0"); // unique name and relation
+  sprintf(sub, "META_FS.0_0_0"); // use META_FS to register root fsnode
   struct qstr dname = { .name = (unsigned char *)sub, .len = strlen(sub) };
   dent = d_alloc(droot, &dname);
   iroot->i_op->mkdir(iroot, dent, mode);
@@ -262,6 +268,52 @@ static void *rand_lookup(void *droot) {
   pthread_exit(NULL);
 }
 
+// Example for using filldir
+static int example_filldir(void *dirent, const char *name, int name_len,
+                           loff_t pos, u64 ino, unsigned dt_type) {
+  fprintf(stdout, "%s\n", name);
+  return 0;
+}
+
+static void test_readdir(struct dentry *droot) {
+  struct dentry *dent;
+  char *fsname;
+  const int k_num_seg = 4;
+  char dir[k_num_seg][MAX_NAME_LEN + 1];
+  
+  // lookup path "/fs_name/dir[1]/dir[2]/dir[3]"
+  fsname = "0_0_0";
+  strcpy(dir[0], fsname);
+  strcpy(dir[1], "0");
+  dent = do_lookup_(droot, dir, 2);
+  if (!dent || !dent->d_inode) {
+    DEBUG_("[Error@test_readdir] cannot find %s of %s.\n", dir[1], fsname);
+  } else {
+    fprintf(stdout, "ls %s of fs %s:\n", dir[1], fsname);
+    // Example for invoking cinq_readdir()
+    struct file *filp = dentry_open(dent, NULL, 0, NULL);
+    filp->f_op->readdir(filp, NULL, example_filldir);
+    put_filp(filp); // remember to free
+  }
+  fprintf(stdout, "\n");
+  
+  fsname = "0_4_3";
+  strcpy(dir[0], fsname);
+  strcpy(dir[1], "2");
+  strcpy(dir[2], "2.2");
+  dent = do_lookup_(droot, dir, 3);
+  if (!dent || !dent->d_inode) {
+    DEBUG_("[Error@test_readdir] cannot find %s of %s.\n", dir[2], fsname);
+  } else {
+    fprintf(stdout, "ls %s of fs %s:\n", dir[2], fsname);
+    // Example for invoking cinq_readdir()
+    struct file *filp = dentry_open(dent, NULL, 0, NULL);
+    filp->f_op->readdir(filp, NULL, example_filldir);
+    put_filp(filp); // remember to free
+  }
+  fprintf(stdout, "\n");
+}
+
 static spinlock_t create_ln_rm_lock_;
 static int create_test_cnt = 0;
 static int create_ok_cnt = 0;
@@ -270,7 +322,7 @@ static int unlink_ok_cnt = 0;
 static int rm_ok_cnt = 0;
 
 // Includes example for invoking:
-// cinq_create, cinq_link, cinq_unlink, cinq_rmdir
+// cinq_create(), cinq_link(), cinq_unlink(), cinq_rmdir()
 static void *rand_create_ln_rm(void *droot) {
   // randomly choose client file system
   char fs_name[MAX_NAME_LEN + 1];
@@ -307,7 +359,7 @@ static void *rand_create_ln_rm(void *droot) {
     
     ++num_create_test;
     
-    /* Example for invoking cinq_create */
+    /* Example for invoking cinq_create() */
     struct inode* const dir_inode = dir_dent->d_inode;
     int mode = (CINQ_VISIBLE << CINQ_MODE_SHIFT) | S_IFREG;
     char file_name[MAX_NAME_LEN + 1];
@@ -322,7 +374,7 @@ static void *rand_create_ln_rm(void *droot) {
       continue;
     }
     
-    /* Example for invoking cinq_link */
+    /* Example for invoking cinq_link() */
     // reuse container and file_dent
     char link_name[MAX_NAME_LEN + 1];
     sprintf(link_name, "__%s", file_name); // adds some prefix to denote link
@@ -366,7 +418,7 @@ static void *rand_create_ln_rm(void *droot) {
             pass ? "OK" : "WRONG");
     if (pass) ++num_link_ok;
     
-    /* Example for invoking cinq_unlink */
+    /* Example for invoking cinq_unlink() */
     if (dir_inode->i_op->unlink(dir_inode, file_dent)) {
       DEBUG_("[Error@rand_create_ln_rm] failed to unlink %s@%s.\n",
              file_name, i_cnode(dir_inode)->ci_name);
@@ -389,7 +441,7 @@ static void *rand_create_ln_rm(void *droot) {
             pass ? "OK" : "WRONG");
     if (pass) ++num_unlink_ok;
     
-    /* Example for invoking cinq_rmdir */
+    /* Example for invoking cinq_rmdir() */
     pass = 0;
     struct inode *i_parent = dir_dent->d_parent->d_inode;
     if (i_parent->i_op->rmdir(i_parent, dir_dent) != -ENOTEMPTY) {
@@ -407,7 +459,8 @@ static void *rand_create_ln_rm(void *droot) {
              dir_dent->d_name.name);
       continue;
     }
-    fprintf(stdout, "cinq_rmdir: %s\tOK\n", dir_file[k_num_seg - 1]);
+    fprintf(stdout, "cinq_rmdir: %s(%s)\tOK\n",
+            dir_file[k_num_seg - 1], fs_name);
     ++num_rmdir_ok;
     
   } // for
@@ -568,6 +621,9 @@ int main(int argc, const char * argv[]) {
     err = pthread_join(sym_thr[ti], &status);
     DEBUG_ON_(err, "[Error@main] error code of pthread_join: %d.\n", err);
   }
+  
+  fprintf(stdout, "\nTest readdir:\n");
+  test_readdir(meta_dent);
   
   int max_dentry_num = atomic_read(&num_dentry_);
   int max_inode_num = atomic_read(&num_inode_);

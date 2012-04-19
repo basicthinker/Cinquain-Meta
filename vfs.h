@@ -627,7 +627,8 @@ extern struct dentry *mount_nodev(struct file_system_type *fs_type,
  */
 extern struct inode *new_inode(struct super_block *sb);
 
-
+extern struct file *dentry_open(struct dentry *dentry, struct vfsmount *mnt,
+                                int flags, const struct cred *cred);
 // include/linux/fs.h
 static inline void inc_nlink(struct inode *inode)
 {

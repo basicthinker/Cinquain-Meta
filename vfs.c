@@ -409,4 +409,29 @@ cleanup_file:
 	return ERR_PTR(error);
 }
 
+/*
+ * dentry_open() will have done dput(dentry) and mntput(mnt) if it returns an
+ * error.
+ */
+struct file *dentry_open(struct dentry *dentry, struct vfsmount *mnt, int flags,
+                         const struct cred *cred)
+{
+	int error;
+	struct file *f;
+  
+//	validate_creds(cred);
+//  BUG_ON(!mnt);
+  
+	error = -ENFILE;
+	f = get_empty_filp();
+	if (f == NULL) {
+		dput(dentry);
+//		mntput(mnt);
+		return ERR_PTR(error);
+	}
+  
+	f->f_flags = flags;
+	return __dentry_open(dentry, mnt, f, NULL, cred);
+}
+
 #endif // __KERNEL__
