@@ -131,6 +131,11 @@ static inline struct cinq_fsnode *i_fs(const struct inode *inode) {
   return i_tag(inode)->t_fs;
 }
 
+static inline struct inode *cinq_iget(struct super_block *sb,
+                                      unsigned long int ino) {
+  return ((struct cinq_tag *)ino)->t_inode;
+}
+
 static inline int negative(const struct cinq_tag *tag) {
   return tag->t_inode == NULL;
 }

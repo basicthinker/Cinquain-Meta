@@ -268,11 +268,53 @@ static void *rand_lookup(void *droot) {
   pthread_exit(NULL);
 }
 
-// Example for using filldir
+
+atomic_t readdir_is_ok = { 1 };
+
+struct some_entry {
+  char name[MAX_NAME_LEN + 1];
+  int size;
+  struct list_head member;
+};
+
+/* Example for using filldir */
 static int example_filldir(void *dirent, const char *name, int name_len,
                            loff_t pos, u64 ino, unsigned dt_type) {
-  fprintf(stdout, "%s\n", name);
+  // User-defined way to use dirent
+  struct list_head *list = (struct list_head *)dirent;
+  // The way to retrieve inode
+  struct inode *inode = cinq_iget(NULL, ino);
+  
+  struct some_entry *cur =
+      (struct some_entry *)malloc(sizeof(struct some_entry));
+  strcpy(cur->name, name);
+  cur->size = inode->i_size;
+  list_add(&cur->member, list);
+  
+  // the rest part is only for test purpose
+  if (strcmp(name, ".") && strcmp(name, "..") &&
+      strcmp(name, i_cnode(inode)->ci_name)) {
+    DEBUG_("[Error@example_filldir] extracted inode not matched for %s.\n",
+           name);
+    atomic_set(&readdir_is_ok, 0);
+  }
   return 0;
+}
+
+static void do_ls_(struct dentry *dent) {
+  
+  /* Example for invoking cinq_readdir() */
+  LIST_HEAD(entries);
+  struct some_entry *cur, *tmp;
+  
+  struct file *filp = dentry_open(dent, NULL, 0, NULL);
+  filp->f_op->readdir(filp, &entries, example_filldir);
+  list_for_each_entry_safe_reverse(cur, tmp, &entries, member) {
+    fprintf(stdout, "%s\t%d\n", cur->name, cur->size);
+    list_del(&cur->member);
+    free(cur);
+  }
+  put_filp(filp); // remember to free
 }
 
 static void test_readdir(struct dentry *droot) {
@@ -289,13 +331,9 @@ static void test_readdir(struct dentry *droot) {
   if (!dent || !dent->d_inode) {
     DEBUG_("[Error@test_readdir] cannot find %s of %s.\n", dir[1], fsname);
   } else {
-    fprintf(stdout, "ls %s of fs %s:\n", dir[1], fsname);
-    // Example for invoking cinq_readdir()
-    struct file *filp = dentry_open(dent, NULL, 0, NULL);
-    filp->f_op->readdir(filp, NULL, example_filldir);
-    put_filp(filp); // remember to free
+    fprintf(stdout, "ls %s of fs %s:\n", dent->d_name.name, fsname);
+    do_ls_(dent);
   }
-  fprintf(stdout, "\n");
   
   fsname = "0_4_3";
   strcpy(dir[0], fsname);
@@ -305,13 +343,9 @@ static void test_readdir(struct dentry *droot) {
   if (!dent || !dent->d_inode) {
     DEBUG_("[Error@test_readdir] cannot find %s of %s.\n", dir[2], fsname);
   } else {
-    fprintf(stdout, "ls %s of fs %s:\n", dir[2], fsname);
-    // Example for invoking cinq_readdir()
-    struct file *filp = dentry_open(dent, NULL, 0, NULL);
-    filp->f_op->readdir(filp, NULL, example_filldir);
-    put_filp(filp); // remember to free
+    fprintf(stdout, "\nls %s of fs %s:\n", dent->d_name.name, fsname);
+    do_ls_(dent);
   }
-  fprintf(stdout, "\n");
 }
 
 static spinlock_t create_ln_rm_lock_;
@@ -654,6 +688,10 @@ int main(int argc, const char * argv[]) {
           atomic_read(&num_sym_ok), atomic_read(&num_sym_test),
           atomic_read(&num_sym_ok) < atomic_read(&num_sym_test) ?
           "NOT Passed" : "Passed");
+  
+  fprintf(stdout, "readdir also needs manual check of log [%s].\n",
+          atomic_read(&readdir_is_ok) ?
+          "Passed" : "NOT Passed");
   
   int final_dentry_num = atomic_read(&num_dentry_);
   fprintf(stdout, "dentry leak test: %d -> %d\t[%s].\n",
