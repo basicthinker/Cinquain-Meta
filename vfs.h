@@ -375,10 +375,10 @@ struct file {
 	 * fu_list becomes invalid after file_free is called and queued via
 	 * fu_rcuhead for RCU freeing
 	 */
-  //	union {
-  //		struct list_head	fu_list;
-  //		struct rcu_head 	fu_rcuhead;
-  //	} f_u;
+  union {
+    struct list_head	fu_list;
+//    struct rcu_head 	fu_rcuhead;
+  } f_u;
 	struct path	f_path;
 #define f_dentry	f_path.dentry
 #define f_vfsmnt	f_path.mnt
@@ -538,6 +538,8 @@ extern void d_genocide(struct dentry *root);
 extern unsigned int current_fsuid(void);
 
 extern unsigned int current_fsgid(void);
+
+extern struct file *get_empty_filp(void);
 
 
 // vfs.c

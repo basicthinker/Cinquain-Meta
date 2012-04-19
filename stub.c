@@ -186,8 +186,8 @@ struct dentry *d_splice_alias(struct inode *inode,
  */
 static void dentry_iput_(struct dentry * dentry)
   __releases(dentry->d_lock)
-  __releases(dentry->d_inode->i_lock)
-{
+  __releases(dentry->d_inode->i_lock) {
+
 	struct inode *inode = dentry->d_inode;
 	if (inode) {
 		dentry->d_inode = NULL;
@@ -220,8 +220,8 @@ static void dentry_iput_(struct dentry * dentry)
 static struct dentry *d_kill_(struct dentry *dentry, struct dentry *parent)
   __releases(dentry->d_lock)
   __releases(parent->d_lock)
-  __releases(dentry->d_inode->i_lock)
-{
+  __releases(dentry->d_inode->i_lock) {
+
 	list_del(&dentry->d_u.d_child);
 //	dentry->d_flags |= DCACHE_DISCONNECTED;
 	if (parent)
@@ -257,8 +257,8 @@ static struct dentry *d_kill_(struct dentry *dentry, struct dentry *parent)
  * Returns dentry requiring refcount drop, or NULL if we're done.
  */
 static inline struct dentry *dentry_kill_(struct dentry *dentry, int ref)
-	__releases(dentry->d_lock)
-{
+	__releases(dentry->d_lock) {
+
 	struct inode *inode;
 	struct dentry *parent;
   
@@ -376,4 +376,58 @@ unsigned int current_fsuid() {
 unsigned int current_fsgid() {
   // return current->cred->fsuid;
   return 0;
+}
+
+/* Find an unused file structure and return a pointer to it.
+ * Returns NULL, if there are no more free file structures or
+ * we run out of memory.
+ *
+ * Be very careful using this.  You are responsible for
+ * getting write access to any mount that you might assign
+ * to this filp, if it is opened for write.  If this is not
+ * done, you will imbalance int the mount's writer count
+ * and a warning at __fput() time.
+ */
+struct file *get_empty_filp() {
+//	const struct cred *cred = current_cred();
+//	static long old_max;
+	struct file * f;
+  
+	/*
+	 * Privileged users can go above max_files
+	 */
+//	if (get_nr_files() >= files_stat.max_files && !capable(CAP_SYS_ADMIN)) {
+//		/*
+//		 * percpu_counters are inaccurate.  Do an expensive check before
+//		 * we go and fail.
+//		 */
+//		if (percpu_counter_sum_positive(&nr_files) >= files_stat.max_files)
+//			goto over;
+//	}
+  
+	// f = kmem_cache_zalloc(filp_cachep, GFP_KERNEL);
+  f = (struct file *)malloc(sizeof(struct file));
+	if (f == NULL)
+		goto fail;
+  
+	INIT_LIST_HEAD(&f->f_u.fu_list);
+//	atomic_long_set(&f->f_count, 1);
+//	rwlock_init(&f->f_owner.lock);
+	spin_lock_init(&f->f_lock);
+//	eventpoll_init_file(f);
+	/* f->f_version: 0 */
+	return f;
+  
+//over:
+//	/* Ran out of filps - report that */
+//	if (get_nr_files() > old_max) {
+//		pr_info("VFS: file-max limit %lu reached\n", get_max_files());
+//		old_max = get_nr_files();
+//	}
+//	goto fail;
+  
+//fail_sec:
+//	file_free(f);
+fail:
+	return NULL;
 }
