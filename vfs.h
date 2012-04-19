@@ -118,6 +118,69 @@
 #define DT_SOCK         12
 #define DT_WHT          14
 
+/*
+ * flags in file.f_mode.  Note that FMODE_READ and FMODE_WRITE must correspond
+ * to O_WRONLY and O_RDWR via the strange trick in __dentry_open()
+ */
+
+/* file is open for reading */
+#define FMODE_READ		((fmode_t)0x1)
+/* file is open for writing */
+#define FMODE_WRITE		((fmode_t)0x2)
+/* file is seekable */
+#define FMODE_LSEEK		((fmode_t)0x4)
+/* file can be accessed using pread */
+#define FMODE_PREAD		((fmode_t)0x8)
+/* file can be accessed using pwrite */
+#define FMODE_PWRITE	((fmode_t)0x10)
+/* File is opened for execution with sys_execve / sys_uselib */
+#define FMODE_EXEC		((fmode_t)0x20)
+/* File is opened with O_NDELAY (only set for block devices) */
+#define FMODE_NDELAY	((fmode_t)0x40)
+/* File is opened with O_EXCL (only set for block devices) */
+#define FMODE_EXCL		((fmode_t)0x80)
+/* File is opened using open(.., 3, ..) and is writeable only for ioctls
+ (specialy hack for floppy.c) */
+#define FMODE_WRITE_IOCTL	((fmode_t)0x100)
+
+/*
+ * Don't update ctime and mtime.
+ *
+ * Currently a special hack for the XFS open_by_handle ioctl, but we'll
+ * hopefully graduate it to a proper O_CMTIME flag supported by open(2) soon.
+ */
+#define FMODE_NOCMTIME		((fmode_t)0x800)
+
+/* Expect random access pattern */
+#define FMODE_RANDOM		((fmode_t)0x1000)
+
+/* File is huge (eg. /dev/kmem): treat loff_t as unsigned */
+#define FMODE_UNSIGNED_OFFSET	((fmode_t)0x2000)
+
+/* File is opened with O_PATH; almost nothing can be done with it */
+#define FMODE_PATH		((fmode_t)0x4000)
+
+/* File was opened by fanotify and shouldn't generate fanotify events */
+#define FMODE_NONOTIFY		((fmode_t)0x1000000)
+
+// include/asm-generic/fcntl.h
+#define O_ACCMODE       00000003
+#define O_PATH          010000000
+#define O_RDONLY        00000000
+#define O_WRONLY        00000001
+#define O_RDWR          00000002
+#define O_CREAT         00000100        /* not fcntl */
+#define O_EXCL          00000200        /* not fcntl */
+#define O_NOCTTY        00000400        /* not fcntl */
+#define O_TRUNC         00001000        /* not fcntl */
+#define O_APPEND        00002000
+
+// fs.h
+#define __FMODE_EXEC		((int) FMODE_EXEC)
+#define __FMODE_NONOTIFY	((int) FMODE_NONOTIFY)
+#define OPEN_FMODE(flag) ((fmode_t)(((flag + 1) & O_ACCMODE) | \
+    (flag & __FMODE_NONOTIFY)))
+
 struct qstr { // include/linux/dcache.h
   unsigned int hash;
   unsigned int len;
@@ -183,7 +246,7 @@ struct super_block {
   //	struct rw_semaphore	s_umount;
   //	struct mutex		s_lock;
 	int			s_count;
-  //	atomic_t		s_active;
+  atomic_t		s_active;
   //#ifdef CONFIG_SECURITY
   //	void                    *s_security;
   //#endif
@@ -194,7 +257,7 @@ struct super_block {
   //#ifdef CONFIG_SMP
   //	struct list_head __percpu *s_files;
   //#else
-  //	struct list_head	s_files;
+  struct list_head	s_files;
   //#endif
   //	/* s_dentry_lru, s_nr_dentry_unused protected by dcache.c lru locks */
   //	struct list_head	s_dentry_lru;	/* unused dentry lru */
@@ -305,7 +368,7 @@ struct inode {
   //#ifdef CONFIG_IMA
   //	atomic_t		i_readcount; /* struct files open RO */
   //#endif
-  //	atomic_t		i_writecount;
+  atomic_t		i_writecount;
   //#ifdef CONFIG_SECURITY
   //	void			*i_security;
   //#endif
@@ -411,6 +474,12 @@ struct file {
   //	unsigned long f_mnt_write_state;
   //#endif
 };
+
+extern int get_write_access(struct inode * inode);
+extern int deny_write_access(struct file * file);
+static inline void put_write_access(struct inode * inode) {
+  atomic_dec(&inode->i_writecount);
+}
 
 struct super_operations {
   struct inode *(*alloc_inode)(struct super_block *sb);
@@ -540,6 +609,8 @@ extern unsigned int current_fsuid(void);
 extern unsigned int current_fsgid(void);
 
 extern struct file *get_empty_filp(void);
+
+extern void put_filp(struct file *file);
 
 
 // vfs.c

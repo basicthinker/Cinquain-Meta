@@ -272,4 +272,141 @@ struct inode *new_inode(struct super_block *sb) {
 	return inode;
 }
 
+/*
+ * get_write_access() gets write permission for a file.
+ * put_write_access() releases this write permission.
+ * This is used for regular files.
+ * We cannot support write (and maybe mmap read-write shared) accesses and
+ * MAP_DENYWRITE mmappings simultaneously. The i_writecount field of an inode
+ * can have the following values:
+ * 0: no writers, no VM_DENYWRITE mappings
+ * < 0: (-i_writecount) vm_area_structs with VM_DENYWRITE set exist
+ * > 0: (i_writecount) users are writing to the file.
+ *
+ * Normally we operate on that counter with atomic_{inc,dec} and it's safe
+ * except for the cases where we don't hold i_writecount yet. Then we need to
+ * use {get,deny}_write_access() - these functions check the sign and refuse
+ * to do the change if sign is wrong. Exclusion between them is provided by
+ * the inode->i_lock spinlock.
+ */
+
+int get_write_access(struct inode * inode)
+{
+	spin_lock(&inode->i_lock);
+	if (atomic_read(&inode->i_writecount) < 0) {
+		spin_unlock(&inode->i_lock);
+		return -ETXTBSY;
+	}
+	atomic_inc(&inode->i_writecount);
+	spin_unlock(&inode->i_lock);
+  
+	return 0;
+}
+
+int deny_write_access(struct file * file)
+{
+	struct inode *inode = file->f_path.dentry->d_inode;
+  
+	spin_lock(&inode->i_lock);
+	if (atomic_read(&inode->i_writecount) > 0) {
+		spin_unlock(&inode->i_lock);
+		return -ETXTBSY;
+	}
+	atomic_dec(&inode->i_writecount);
+	spin_unlock(&inode->i_lock);
+  
+	return 0;
+}
+
+
+static struct file *__dentry_open(struct dentry *dentry, struct vfsmount *mnt,
+                                  struct file *f,
+                                  int (*open)(struct inode *, struct file *),
+                                  const struct cred *cred)
+{
+	static const struct file_operations empty_fops = {};
+	struct inode *inode;
+	int error;
+  
+	f->f_mode = OPEN_FMODE(f->f_flags) | FMODE_LSEEK |
+      FMODE_PREAD | FMODE_PWRITE;
+  
+	if (unlikely(f->f_flags & O_PATH))
+		f->f_mode = FMODE_PATH;
+  
+	inode = dentry->d_inode;
+	if (f->f_mode & FMODE_WRITE) {
+    //		error = __get_file_write_access(inode, mnt); // simplified as below
+    error = get_write_access(inode);
+		if (error)
+			goto cleanup_file;
+//		if (!special_file(inode->i_mode))
+//			file_take_write(f);
+	}
+  
+//	f->f_mapping = inode->i_mapping;
+	f->f_path.dentry = dentry;
+//	f->f_path.mnt = mnt;
+	f->f_pos = 0;
+
+//	file_sb_list_add(f, inode->i_sb);
+  
+	if (unlikely(f->f_mode & FMODE_PATH)) {
+		f->f_op = &empty_fops;
+		return f;
+	}
+  
+	f->f_op = inode->i_fop; // fops_get(inode->i_fop);
+  
+//	error = security_dentry_open(f, cred);
+//	if (error)
+//		goto cleanup_all;
+  
+	if (!open && f->f_op)
+		open = f->f_op->open;
+	if (open) {
+		error = open(inode, f);
+		if (error)
+			goto cleanup_all;
+	}
+//	if ((f->f_mode & (FMODE_READ | FMODE_WRITE)) == FMODE_READ)
+//		i_readcount_inc(inode); // only ifdef CONFIG_IMA
+  
+	f->f_flags &= ~(O_CREAT | O_EXCL | O_NOCTTY | O_TRUNC);
+  
+//	file_ra_state_init(&f->f_ra, f->f_mapping->host->i_mapping);
+  
+	/* NB: we're sure to have correct a_ops only after f_op->open */
+//	if (f->f_flags & O_DIRECT) {
+//		if (!f->f_mapping->a_ops ||
+//		    ((!f->f_mapping->a_ops->direct_IO) &&
+//         (!f->f_mapping->a_ops->get_xip_mem))) {
+//          fput(f);
+//          f = ERR_PTR(-EINVAL);
+//        }
+//	}
+  
+	return f;
+  
+cleanup_all:
+  //	fops_put(f->f_op); // simplified as below
+  
+	if (f->f_mode & FMODE_WRITE) {
+		put_write_access(inode);
+//		if (!special_file(inode->i_mode)) {
+//			file_reset_write(f);
+//			mnt_drop_write(mnt);
+//		}
+	}
+  
+//	file_sb_list_del(f);
+	f->f_path.dentry = NULL;
+//	f->f_path.mnt = NULL;
+cleanup_file:
+	put_filp(f);
+	dput(dentry);
+//	mntput(mnt);
+	return ERR_PTR(error);
+}
+
 #endif // __KERNEL__
