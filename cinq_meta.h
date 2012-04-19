@@ -193,7 +193,8 @@ extern void journal_inode(struct inode *inode, enum journal_action action);
 
 
 /* cnode.c */
-
+extern struct inode *cnode_lookup_inode(struct cinq_inode *cnode,
+                                        struct cinq_fsnode *fs);
 // @dentry: a negative dentry, namely whose d_inode is null.
 //    dentry->d_fsdata should better contains cinq_fsnode.fs_id that specifies
 //    the file system (cinq_fsnode) to take the operation. Otherwise,

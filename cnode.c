@@ -164,6 +164,18 @@ static inline void cnode_rm_child_syn(struct cinq_inode *parent, struct cinq_ino
   write_unlock(&parent->ci_children_lock);
 }
 
+struct inode *cnode_lookup_inode(struct cinq_inode *cnode, struct cinq_fsnode *fs) {
+  struct cinq_tag *tag;
+  read_lock(&cnode->ci_tags_lock);
+  foreach_ancestor_tag(fs, tag, cnode) {
+    if (tag) {
+      rd_release_return(&cnode->ci_tags_lock, tag->t_inode);
+    }
+  }
+  read_unlock(&cnode->ci_tags_lock);
+  return NULL;
+}
+
 static void cnode_evict(struct cinq_inode *cnode) {
   if (cnode->ci_tags || cnode->ci_children) {
     DEBUG_("[Error@cnode_evict] failed to delete cnode %lx "
@@ -539,19 +551,8 @@ static inline struct inode *cinq_lookup_(const struct inode *dir,
   }
   
   fs = i_fs(dir);
-  struct cinq_tag *tag;
-  int found = 0;
-  read_lock(&child->ci_tags_lock);
-  foreach_ancestor_tag(fs, tag, child) {
-    if (tag) {
-      found = 1;
-      break;
-    }
-  }
-  read_unlock(&child->ci_tags_lock);
+  return cnode_lookup_inode(child, fs);
 
-  return found ? tag->t_inode : NULL;
-  
   // Since we directly read meta data in memory, there is no iget-like function.
   // No inodes are cached or added to super_block inode list.
 }
