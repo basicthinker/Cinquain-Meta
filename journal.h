@@ -22,16 +22,32 @@ enum journal_action {
   DELETE = 2
 };
 
-struct journal_entry {
+struct cinq_jentry {
   void *key;
   void *data;
   enum journal_action action;
   struct list_head list;
 };
 
-static inline struct journal_entry *journal_entry_new(void *key, void *data,
+#ifdef __KERNEL__
+
+static struct kmem_cache *cinq_jentry_cachep;
+
+#define jentry_malloc_() \
+    ((struct cinq_jentry *)kmem_cache_alloc(cinq_jentry_cachep, GFP_KERNEL))
+#define jentry_free_(p) (kmem_cache_free(cinq_jentry_cachep, p))
+
+#else
+
+#define jentry_malloc_() \
+    ((struct cinq_jentry *)malloc(sizeof(struct cinq_jentry)))
+#define jentry_free_(p) (free(p))
+
+#endif // __KERNEL__
+
+static inline struct cinq_jentry *journal_entry_new(void *key, void *data,
                                                       enum journal_action action) {
-  struct journal_entry *new_entry = journal_entry_malloc_();
+  struct cinq_jentry *new_entry = jentry_malloc_();
   new_entry->key = key;
   new_entry->data = data;
   new_entry->action = action;
@@ -51,25 +67,44 @@ static inline void journal_init(struct cinq_journal *journal, char *name) {
 }
 
 static inline int journal_empty_syn(struct cinq_journal *journal) {
+  int ret;
   spin_lock(&journal->lock);
-  int ret = list_empty(&journal->list);
+  ret = list_empty(&journal->list);
   spin_unlock(&journal->lock);
   return ret;
 }
 
-static inline struct journal_entry *journal_get_syn(struct cinq_journal *journal) {
+static inline struct cinq_jentry *journal_get_syn(struct cinq_journal *journal) {
+  struct list_head *head;
   spin_lock(&journal->lock);
-  struct list_head *head = journal->list.next;
+  head = journal->list.next;
   list_del(head);
   spin_unlock(&journal->lock);
-  return list_entry(head, struct journal_entry, list);
+  return list_entry(head, struct cinq_jentry, list);
 }
 
 static inline void journal_add_syn(struct cinq_journal *journal,
-                                   struct journal_entry *entry) {
+                                   struct cinq_jentry *entry) {
   spin_lock(&journal->lock);
   list_add_tail(&entry->list, &journal->list);
   spin_unlock(&journal->lock);
 }
+
+#ifdef __KERNEL__
+
+static int init_jentry_cache(void) {
+  cinq_jentry_cachep = kmem_cache_create(
+      "cinq_jentry_cache", sizeof(struct cinq_jentry), 0,
+      (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD), NULL);
+  if (cinq_jentry_cachep == NULL)
+    return -ENOMEM;
+  return 0;
+}
+
+static void destroy_jentry_cache(void) {
+  kmem_cache_destroy(cinq_jentry_cachep);
+}
+
+#endif // __KERNEL__
 
 #endif // CINQUAIN_META_LOG_H_

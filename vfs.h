@@ -13,9 +13,9 @@
 #ifndef CINQUAIN_META_VFS_H_
 #define CINQUAIN_META_VFS_H_
 
-#include "util.h"
-
 #ifndef __KERNEL__
+
+#include "util.h"
 
 #define invalidate_inode_buffers(inode)
 
@@ -798,6 +798,10 @@ static inline void setattr_copy(struct inode *inode, const struct iattr *attr)
 		inode->i_mode = mode;
 	}
 }
+
+#else
+
+#include <linux/fs.h>
 
 #endif // __KERNEL__
 #endif // CINQUAIN_META_VFS_H_

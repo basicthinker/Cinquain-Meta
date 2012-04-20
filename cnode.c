@@ -13,6 +13,22 @@
 #include "cinq_meta.h"
 #include "util.h"
 
+#ifdef __KERNEL__
+
+static struct kmem_cache *cinq_inode_cachep;
+
+#define cnode_malloc_() \
+    ((struct cinq_inode *)kmem_cache_alloc(cinq_inode_cachep, GFP_KERNEL))
+#define cnode_free_(p) (kmem_cache_free(cinq_inode_cachep, p))
+
+#else
+
+#define cnode_malloc_() \
+    ((struct cinq_inode *)malloc(sizeof(struct cinq_inode)))
+#define cnode_free_(p) (free(p))
+
+#endif // __KERNEL__
+
 static inline int cnode_is_root_(const struct cinq_inode *cnode) {
   return cnode->ci_parent == cnode;
 }
@@ -270,7 +286,11 @@ static void cnode_tag_ancestors_(const struct dentry *dentry) {
 static inline void tag_evict(struct cinq_tag *tag) {
   if (tag->t_inode) {
     tag->t_inode->i_nlink = S_ISDIR(tag->t_inode->i_mode) ? 2 : 1;
-    tag_drop_inode_(tag);
+    inode_free_(tag->t_inode);
+
+#ifdef CINQ_DEBUG
+  atomic_dec(&num_inode_);
+#endif // CINQ_DEBUG
   }
   cnode_rm_tag_syn(tag->t_host, tag);
   tag_free_(tag);
@@ -772,7 +792,7 @@ int cinq_setattr(struct dentry *dentry, struct iattr *attr) {
   if (error)
     return error;
   
-  if (attr->ia_valid & ATTR_SIZE && attr->ia_size != inode->i_size) {
+  if ((attr->ia_valid & ATTR_SIZE) && attr->ia_size != inode->i_size) {
     error = cinq_setsize_(inode, attr->ia_size);
     if (error)
       return error;
@@ -781,3 +801,20 @@ int cinq_setattr(struct dentry *dentry, struct iattr *attr) {
   
   return error;
 }
+
+#ifdef __KERNEL__
+
+int init_cnode_cache(void) {
+  cinq_inode_cachep = kmem_cache_create(
+      "cinq_inode_cache", sizeof(struct cinq_inode), 0,
+      (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD), NULL);
+  if (cinq_inode_cachep == NULL)
+    return -ENOMEM;
+  return 0;
+}
+
+void destroy_cnode_cache(void) {
+  kmem_cache_destroy(cinq_inode_cachep);
+}
+
+#endif

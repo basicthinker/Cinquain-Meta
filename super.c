@@ -72,6 +72,10 @@ void cinq_kill_sb(struct super_block *sb) {
   DEBUG_ON_(!sb->s_root, "[Warn@cinq_kill_sb]: invoked on null dentry.\n");
 }
 
+struct inode *cinq_alloc_inode(struct super_block *sb) {
+  return inode_malloc_();
+}
+
 // Not actually delte inodes since they are in-memory
 void cinq_evict_inode(struct inode *inode) {
   if (!inode->i_nlink) { // && !is_bad_inode(inode)
@@ -82,7 +86,7 @@ void cinq_evict_inode(struct inode *inode) {
 
 THREAD_FUNC_(journal_writeback)(void *data) {
   struct cinq_journal *journal = data;
-  struct journal_entry *entry;
+  struct cinq_jentry *entry;
   int num = 0;
   
   while (!thread_should_stop()) {
@@ -107,6 +111,7 @@ THREAD_FUNC_(journal_writeback)(void *data) {
         default:
           DEBUG_("[Error@journal_writeback] journal entry action is NOT valid:"
                  " %d.\n", entry->action);
+          break;
       }
     }
     
@@ -117,17 +122,17 @@ THREAD_FUNC_(journal_writeback)(void *data) {
 }
 
 void journal_fsnode(struct cinq_fsnode *fsnode, enum journal_action action) {
-  struct journal_entry *entry = journal_entry_new(&fsnode->fs_id,
+  struct cinq_jentry *entry = journal_entry_new(&fsnode->fs_id,
                                                   fsnode, action);
   journal_add_syn(&cinq_journal, entry);
 }
 
 void journal_cnode(struct cinq_inode *cnode, enum journal_action action) {
-  struct journal_entry *entry = journal_entry_new(&cnode->ci_id, cnode, action);
+  struct cinq_jentry *entry = journal_entry_new(&cnode->ci_id, cnode, action);
   journal_add_syn(&cinq_journal, entry);
 }
 
 void journal_inode(struct inode *inode, enum journal_action action) {
-  struct journal_entry *entry = journal_entry_new(&inode->i_ino, inode, action);
+  struct cinq_jentry *entry = journal_entry_new(&inode->i_ino, inode, action);
   journal_add_syn(&cinq_journal, entry);
 }

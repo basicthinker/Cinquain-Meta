@@ -78,8 +78,9 @@ static inline struct cinq_fsnode *cfs_find_(struct cinq_file_systems *table,
 
 static inline struct cinq_fsnode *cfs_find_syn(struct cinq_file_systems *table,
                                                const char *name) {
+  struct cinq_fsnode *fsnode;
   read_lock(&table->lock);
-  struct cinq_fsnode *fsnode = cfs_find_(table, name);
+  fsnode = cfs_find_(table, name);
   read_unlock(&table->lock);
   return fsnode;
 }
@@ -182,9 +183,7 @@ extern struct dentry *cinq_mount (struct file_system_type *fs_type, int flags,
                                   const char *dev_name, void *data);
 extern void cinq_kill_sb (struct super_block *sb);
 
-extern void cinq_dirty_inode(struct inode *inode);
-
-extern int cinq_write_inode(struct inode *inode, struct writeback_control *wbc);
+extern struct inode *cinq_alloc_inode(struct super_block *sb);
 
 extern void cinq_evict_inode(struct inode *inode);
 
@@ -275,5 +274,16 @@ extern const struct inode_operations cinq_file_inode_operations;
 extern const struct inode_operations cinq_symlink_inode_operations;
 extern const struct file_operations cinq_file_operations;
 extern const struct file_operations cinq_dir_operations;
+
+#ifdef __KERNEL__
+
+extern int init_cnode_cache(void);
+extern void destroy_cnode_cache(void);
+
+extern int init_fsnode_cache(void);
+extern void destroy_fsnode_cache(void);
+
+#endif
+
 
 #endif // CINQUAIN_META_CINQ_META_H_

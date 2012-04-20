@@ -27,6 +27,7 @@ const struct file_system_type cinqfs = {
 };
 
 const struct super_operations cinq_super_operations = {
+  .alloc_inode = cinq_alloc_inode,
   .destroy_inode = cinq_destroy_inode,
   .evict_inode = cinq_evict_inode
 };

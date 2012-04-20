@@ -24,9 +24,18 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef UTHASH_H
 #define UTHASH_H 
 
+#ifdef __KERNEL__
+#include <linux/types.h>
+#include <linux/string.h>
+#define exit(n) do { \
+  printk(KERN_ALERT "[exit@uthash.h]\n"); \
+  for(;;); \
+} while(0)
+#else
 #include <string.h>   /* memcmp,strlen */
 #include <stddef.h>   /* ptrdiff_t */
 #include <stdlib.h>   /* exit() */
+#endif // __KERNEL__
 
 /* These macros use decltype or the earlier __typeof GNU extension.
    As decltype is only available in newer compilers (VS2010 or gcc 4.3+
@@ -61,8 +70,15 @@ do {                                                                            
 typedef unsigned int uint32_t;
 typedef unsigned char uint8_t;
 #else
+
+#ifdef __KERNEL__
+typedef u32 uint32_t;
+typedef u8 uint8_t;
+#else
 #include <inttypes.h>   /* uint32_t */
-#endif
+#endif // __KERNEL__
+
+#endif // _MSC_VER
 
 #define UTHASH_VERSION 1.9.4
 
@@ -247,7 +263,13 @@ do {                                                                            
  * This is for uthash developer only; it compiles away if HASH_DEBUG isn't defined.
  */
 #ifdef HASH_DEBUG
+
+#ifdef __KERNEL__
+#define HASH_OOPS(...) do { printk(KERN_ERR __VA_ARGS__); exit(-1); } while (0)
+#else
 #define HASH_OOPS(...) do { fprintf(stderr,__VA_ARGS__); exit(-1); } while (0)
+#endif // __KERNEL__
+
 #define HASH_FSCK(hh,head)                                                       \
 do {                                                                             \
     unsigned _bkt_i;                                                             \

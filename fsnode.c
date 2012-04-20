@@ -12,6 +12,22 @@
 
 #include "cinq_meta.h"
 
+#ifdef __KERNEL__
+
+static struct kmem_cache *cinq_fsnode_cachep;
+
+#define fsnode_malloc_() \
+    ((struct cinq_fsnode *)kmem_cache_alloc(cinq_fsnode_cachep, GFP_KERNEL))
+#define fsnode_free_(p) (kmem_cache_free(cinq_fsnode_cachep, p))
+
+#else
+
+#define fsnode_malloc_() \
+    ((struct cinq_fsnode *)malloc(sizeof(struct cinq_fsnode)))
+#define fsnode_free_(p) (free(p))
+
+#endif // __KERNEL__
+
 // Checks wether two fsnodes have direct relation.
 // Used to prevent cyclic path in tree.
 static inline int fsnode_ancestor_(struct cinq_fsnode *ancestor,
@@ -119,3 +135,21 @@ void fsnode_bridge(struct cinq_fsnode *out) {
   }
   fsnode_evict(out);
 }
+
+#ifdef __KERNEL__
+
+int init_fsnode_cache(void) {
+  cinq_fsnode_cachep = kmem_cache_create(
+      "cinq_fsnode_cache", sizeof(struct cinq_fsnode), 0,
+      (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD), NULL);
+  if (cinq_fsnode_cachep == NULL)
+    return -ENOMEM;
+  return 0;
+}
+
+void destroy_fsnode_cache(void) {
+  kmem_cache_destroy(cinq_fsnode_cachep);
+}
+
+#endif
+

@@ -17,7 +17,12 @@
 
 #ifdef __KERNEL__
 
+#include <linux/slab.h>
+#include <linux/vmalloc.h>
+#include <linux/types.h>
 #include <linux/string.h>
+#include <linux/spinlock.h>
+#include <linux/time.h>
 #include <linux/list.h>
 
 #else
@@ -60,10 +65,6 @@ typedef uint8_t u8;
 typedef uint32_t u32;
 typedef uint64_t u64;
 typedef unsigned fmode_t;
-
-#ifndef _SYS_TYPES_H // linux sys/types.h has defined loff_t
-typedef long long loff_t;
-#endif
 
 typedef pthread_rwlock_t rwlock_t;
 #define RW_LOCK_UNLOCKED PTHREAD_RWLOCK_INITIALIZER
@@ -114,8 +115,12 @@ static inline long PTR_ERR(const void *ptr) { // include/linux/err.h
 #define MS_ACTIVE       (1<<30)
 
 #define MAX_LFS_FILESIZE 0x7fffffffffffffffUL
-
 #define MAX_NESTED_LINKS 6
+
+// include/linux/pagemap.h
+#define PAGE_CACHE_SHIFT        13 // 8KB
+#define PAGE_CACHE_SIZE         ((uint64_t)1 << PAGE_CACHE_SHIFT)
+#define PAGE_CACHE_MASK         (~(PAGE_SIZE - 1))
 
 #endif // __KERNEL__
 
@@ -123,41 +128,34 @@ static inline long PTR_ERR(const void *ptr) { // include/linux/err.h
 #ifdef __KERNEL__ // intended for Linux
 /* Kernel (exchangable) */
 
+#ifdef CINQ_DEBUG
+#define DEBUG_ON_(cond, ...) if (unlikely(cond)) { printk(KERN_DEBUG __VA_ARGS__); }
+#define DEBUG_(...) (printk(KERN_DEBUG __VA_ARGS__))
+#endif // CINQ_DEBUG
+
+#define inode_malloc_() \
+    ((struct inode *)vmalloc(sizeof(struct inode)))
+#define inode_free_(p) (vfree(p))
+
+#define tag_malloc_() \
+    ((struct cinq_tag *)vmalloc(sizeof(struct cinq_tag)))
+#define tag_free_(p) (vfree(p))
 
 #else
 /* User space (exchangable) */
-
-// include/linux/pagemap.h
-#define PAGE_CACHE_SHIFT        13 // 8KB
-#define PAGE_CACHE_SIZE         ((uint64_t)1 << PAGE_CACHE_SHIFT)
-#define PAGE_CACHE_MASK         (~(PAGE_SIZE - 1))
 
 #ifdef CINQ_DEBUG
 #define DEBUG_ON_(cond, ...) if (unlikely(cond)) { fprintf(stderr, __VA_ARGS__); }
 #define DEBUG_(...) (fprintf(stderr, __VA_ARGS__))
 #endif // CINQ_DEBUG
 
+#define inode_malloc_() \
+		((struct inode *)malloc(sizeof(struct inode)))
 #define inode_free_(p) (free(p))
-
-#define fsnode_malloc_() \
-    ((struct cinq_fsnode *)malloc(sizeof(struct cinq_fsnode)))
-#define fsnode_free_(p) (free(p))
 
 #define tag_malloc_() \
     ((struct cinq_tag *)malloc(sizeof(struct cinq_tag)))
 #define tag_free_(p) (free(p))
-
-#define cnode_malloc_() \
-    ((struct cinq_inode *)malloc(sizeof(struct cinq_inode)))
-#define cnode_free_(p) (free(p))
-
-#define journal_malloc_() \
-    ((struct cinq_journal *)malloc(sizeof(struct cinq_journal)))
-#define journal_free_(p) (free(p))
-
-#define journal_entry_malloc_() \
-    ((struct journal_entry *)malloc(sizeof(struct journal_entry)))
-#define journal_entry_free_(p) (free(p))
 
 #define kmalloc(n) malloc(n)
 

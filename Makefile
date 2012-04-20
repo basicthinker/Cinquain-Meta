@@ -3,7 +3,7 @@ EXTRA_CFLAGS = -std=gnu99 -g -pthread -Wall -DCINQ_DEBUG -DHASH_DEBUG=1
 # EXTRA_CFLAGS = -std=gnu99 -pthread -Wall -Os
 LIB = -lpthread
 OBJDIR = obj
-KSRC = /usr/src/linux-source-3.0.0/
+KSRC = /lib/modules/`uname -r`/build
 SRC := $(wildcard *.c)
 OBJ := $(SRC:%.c=$(OBJDIR)/%.o)
 

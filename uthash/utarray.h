@@ -35,9 +35,18 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define _UNUSED_ 
 #endif
 
+#ifdef __KERNEL__
+#include <linux/types.h>
+#include <linux/string.h>
+#define exit(n) do { \
+  printk(KERN_ALERT "[exit@utarray.h]\n"); \
+  for(;;); \
+} while(0)
+#else
 #include <stddef.h>  /* size_t */
 #include <string.h>  /* memset, etc */
 #include <stdlib.h>  /* exit */
+#endif // __KERNEL__
 
 #define oom() exit(-1)
 
