@@ -371,7 +371,7 @@ struct inode *cnode_make_tree(struct super_block *sb) {
   }
   iroot->i_uid = 0;
   iroot->i_gid = 0;
-  iroot->i_mode |= S_IFDIR;
+  iroot->i_mode = S_IFDIR | S_IRWXU | S_IRGRP | S_IXGRP;
   iroot->i_mtime = iroot->i_atime = iroot->i_ctime = CURRENT_TIME;
   // insert_inode_hash(inode);
   iroot->i_op = &cinq_dir_inode_operations;

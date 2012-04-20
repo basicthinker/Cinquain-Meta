@@ -220,9 +220,9 @@ extern struct dentry *cinq_lookup(struct inode *dir, struct dentry *dentry,
 //    If the fsnode is specified via dentry->d_fsdata,
 //    this parameter can be set null.
 extern int cinq_create(struct inode *dir, struct dentry *dentry,
-                int mode, struct nameidata *nameidata);
+                       int mode, struct nameidata *nameidata);
 extern int cinq_link(struct dentry *old_dentry, struct inode *dir,
-              struct dentry *dentry);
+                     struct dentry *dentry);
 extern int cinq_unlink(struct inode *dir, struct dentry *dentry);
 
 extern int cinq_symlink(struct inode *dir, struct dentry *dentry,
@@ -232,7 +232,7 @@ extern void *cinq_follow_link(struct dentry *dentry, struct nameidata *nd);
 extern int cinq_rmdir(struct inode *dir, struct dentry *dentry);
 
 extern int cinq_rename(struct inode *old_dir, struct dentry *old_dentry,
-                struct inode *new_dir, struct dentry *new_dentry);
+                       struct inode *new_dir, struct dentry *new_dentry);
 extern int cinq_setattr(struct dentry *dentry, struct iattr *attr);
 
 extern void cinq_destroy_inode(struct inode *inode);
