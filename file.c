@@ -38,10 +38,26 @@ int cinq_readdir(struct file *filp, void *dirent, filldir_t filldir) {
 	struct dentry *dentry = filp->f_path.dentry;
   struct inode *inode = dentry->d_inode;
   struct cinq_inode *cnode = i_cnode(inode);
+  
+  if (unlikely(inode_meta_root(inode))) {
+    struct cinq_tag *tag;
+    read_lock(&cnode->ci_tags_lock);
+    for (tag = cnode->ci_tags; tag != NULL; tag = tag->hh.next) {
+      if (tag->t_fs == META_FS) continue;
+      if (filldir(dirent, tag->t_fs->fs_name, strlen(tag->t_fs->fs_name),
+                  filp->f_pos, tag->t_inode->i_ino, DT_DIR) < 0)
+        return 0;
+
+      filp->f_pos++;
+    }
+    read_unlock(&cnode->ci_tags_lock);
+    return 0;
+  }
+
   ino_t ino;
   struct cinq_inode *cur;
   struct inode *sub;
-  
+
 	switch (filp->f_pos) {
 		case 0:
 			if (filldir(dirent, ".", 1, filp->f_pos, inode->i_ino, DT_DIR) < 0)
@@ -59,10 +75,8 @@ int cinq_readdir(struct file *filp, void *dirent, filldir_t filldir) {
 			for (cur = cnode->ci_children; cur != NULL; cur = cur->ci_child.next) {
         sub = cnode_lookup_inode(cur, dentry->d_fsdata);
         if (!sub) continue;
-				if (filldir(dirent, cur->ci_name, 
-                    strlen(cur->ci_name), filp->f_pos, 
-                    sub->i_ino, 
-                    dt_type(sub)) < 0)
+				if (filldir(dirent, cur->ci_name, strlen(cur->ci_name),
+				            filp->f_pos, sub->i_ino, dt_type(sub)) < 0)
 					return 0;
 
 				filp->f_pos++;

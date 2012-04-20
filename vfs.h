@@ -649,7 +649,7 @@ static inline void drop_nlink(struct inode *inode)
 static inline void inode_init_owner(struct inode *inode, const struct inode *dir,
                                     mode_t mode) {
 	inode->i_uid = current_fsuid();
-	if (dir && dir->i_mode & S_ISGID) {
+	if (dir && (dir->i_mode & S_ISGID)) {
 		inode->i_gid = dir->i_gid;
 		if (S_ISDIR(mode))
 			mode |= S_ISGID;
@@ -743,29 +743,6 @@ static inline int vfs_readlink_(struct dentry *dentry, char *buffer,
 
 	return len;
 }
-
-/*
- * A helper for ->readlink().  This should be used *ONLY* for symlinks that
- * have ->follow_link() touching nd only in nd_set_link().  Using (or not
- * using) it for any given inode is up to filesystem.
- */
-static int generic_readlink(struct dentry *dentry, char *buffer, int buflen)
-{
-	struct nameidata nd;
-	void *cookie;
-	int res;
-  
-	nd.depth = 0;
-	cookie = dentry->d_inode->i_op->follow_link(dentry, &nd);
-	if (IS_ERR(cookie))
-		return PTR_ERR(cookie);
-  
-	res = vfs_readlink_(dentry, buffer, buflen, nd_get_link(&nd));
-	if (dentry->d_inode->i_op->put_link)
-		dentry->d_inode->i_op->put_link(dentry, &nd, cookie);
-	return res;
-}
-
 
 /** fs/attr.c
  * inode_change_ok - check if attribute changes to an inode are allowed

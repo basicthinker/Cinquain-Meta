@@ -13,10 +13,6 @@
 #include "cinq_meta.h"
 #include "util.h"
 
-static inline int inode_meta_root_(const struct inode *inode) {
-  return i_tag(inode)->t_fs == META_FS;
-}
-
 static inline int cnode_is_root_(const struct cinq_inode *cnode) {
   return cnode->ci_parent == cnode;
 }
@@ -375,6 +371,7 @@ struct inode *cnode_make_tree(struct super_block *sb) {
   iroot->i_mtime = iroot->i_atime = iroot->i_ctime = CURRENT_TIME;
   // insert_inode_hash(inode);
   iroot->i_op = &cinq_dir_inode_operations;
+  iroot->i_fop = &cinq_dir_operations;
 
   struct cinq_tag *tag = tag_new_(META_FS, CINQ_INVISIBLE, iroot);
   cnode_add_tag_syn(croot, tag);
@@ -485,7 +482,7 @@ int cinq_symlink(struct inode *dir, struct dentry *dentry,
 
 int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
   
-  if (unlikely(inode_meta_root_(dir))) { // not actually make dir
+  if (unlikely(inode_meta_root(dir))) { // not actually make dir
     char namestr[MAX_NAME_LEN + 1];
     strncpy(namestr, (char *)dentry->d_name.name, dentry->d_name.len + 1);
     char *fsnames[2] = { NULL, NULL };
@@ -565,7 +562,7 @@ struct dentry *cinq_lookup(struct inode *dir, struct dentry *dentry,
   char *name = (char *)dentry->d_name.name;
   
   struct inode *inode;
-  if (inode_meta_root_(dir)) {
+  if (inode_meta_root(dir)) {
     struct cinq_fsnode *fs = cfs_find_syn(&file_systems, name);
     if (!fs) return NULL;
     inode = fs->fs_root->d_inode;
@@ -752,16 +749,12 @@ int cinq_rename(struct inode *old_dir, struct dentry *old_dentry,
 
 
 static inline int cinq_setsize_(struct inode *inode, loff_t newsize) {
-	int error;
-  
+
 	if (!(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) ||
         S_ISLNK(inode->i_mode)))
 		return -EINVAL;
 	if (i_tag(inode)->t_symname)
 		return -EINVAL;
-
-	if (error)
-		return error;
   
   inode->i_size = newsize;
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME_SEC;

@@ -323,6 +323,10 @@ static void test_readdir(struct dentry *droot) {
   const int k_num_seg = 4;
   char dir[k_num_seg][MAX_NAME_LEN + 1];
   
+  // list all user file systems
+  fprintf(stdout, "ls root:\n");
+  do_ls_(droot);
+
   // lookup path "/fs_name/dir[1]/dir[2]/dir[3]"
   fsname = "0_0_0";
   strcpy(dir[0], fsname);
@@ -331,7 +335,7 @@ static void test_readdir(struct dentry *droot) {
   if (!dent || !dent->d_inode) {
     DEBUG_("[Error@test_readdir] cannot find %s of %s.\n", dir[1], fsname);
   } else {
-    fprintf(stdout, "ls %s of fs %s:\n", dent->d_name.name, fsname);
+    fprintf(stdout, "\nls %s of fs %s:\n", dent->d_name.name, fsname);
     do_ls_(dent);
   }
   
@@ -658,9 +662,11 @@ int main(int argc, const char * argv[]) {
   
   fprintf(stdout, "\nTest readdir:\n");
   test_readdir(meta_dent);
-  
+
+#ifdef CINQ_DEBUG
   int max_dentry_num = atomic_read(&num_dentry_);
   int max_inode_num = atomic_read(&num_inode_);
+#endif
   
   // Kill file systems
   cinqfs.kill_sb(meta_dent->d_sb);
@@ -693,6 +699,7 @@ int main(int argc, const char * argv[]) {
           atomic_read(&readdir_is_ok) ?
           "Passed" : "NOT Passed");
   
+#ifdef CINQ_DEBUG
   int final_dentry_num = atomic_read(&num_dentry_);
   fprintf(stdout, "dentry leak test: %d -> %d\t[%s].\n",
           max_dentry_num, final_dentry_num,
@@ -702,6 +709,7 @@ int main(int argc, const char * argv[]) {
   fprintf(stdout, "inode leak test: %d -> %d\t[%s].\n",
           max_inode_num, final_inode_num,
           final_inode_num ? "NOT Passed" : "Passed");
+#endif
   
   return 0;
 }

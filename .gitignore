@@ -2,9 +2,10 @@ tags
 *.1
 test
 *.tmp
+*.log
 .DS_Store
 .cproject
 .project
 .settings/*
 Debug/*
-Objects/*
+obj/*

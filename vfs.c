@@ -273,6 +273,28 @@ struct inode *new_inode(struct super_block *sb) {
 }
 
 /*
+ * A helper for ->readlink().  This should be used *ONLY* for symlinks that
+ * have ->follow_link() touching nd only in nd_set_link().  Using (or not
+ * using) it for any given inode is up to filesystem.
+ */
+int generic_readlink(struct dentry *dentry, char *buffer, int buflen)
+{
+  struct nameidata nd;
+  void *cookie;
+  int res;
+
+  nd.depth = 0;
+  cookie = dentry->d_inode->i_op->follow_link(dentry, &nd);
+  if (IS_ERR(cookie))
+    return PTR_ERR(cookie);
+
+  res = vfs_readlink_(dentry, buffer, buflen, nd_get_link(&nd));
+  if (dentry->d_inode->i_op->put_link)
+    dentry->d_inode->i_op->put_link(dentry, &nd, cookie);
+  return res;
+}
+
+/*
  * get_write_access() gets write permission for a file.
  * put_write_access() releases this write permission.
  * This is used for regular files.

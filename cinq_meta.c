@@ -63,4 +63,3 @@ const struct file_operations cinq_file_operations = {
 const struct file_operations cinq_dir_operations = {
   .readdir  = cinq_readdir
 };
-

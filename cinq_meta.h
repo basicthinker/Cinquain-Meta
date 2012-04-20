@@ -167,6 +167,10 @@ static inline struct cinq_inode *i_cnode(const struct inode *inode) {
   return i_tag(inode)->t_host;
 }
 
+static inline int inode_meta_root(const struct inode *inode) {
+  return i_tag(inode)->t_fs == META_FS;
+}
+
 #define foreach_ancestor_tag(fs, tag, cnode) \
     for (tag = cnode_find_tag_(cnode, fs); \
          fs != META_FS && (!tag || !impenetrable(tag, fs)); \
@@ -259,7 +263,8 @@ extern ssize_t cinq_write(struct file *filp, const char *buf, size_t len,
 extern int cinq_release_file (struct inode * inode, struct file * filp);
 
 extern int cinq_readdir (struct file * filp, void * dirent, filldir_t filldir);
-
+// vfs.c
+extern int generic_readlink(struct dentry *dentry, char *buffer, int buflen);
 
 /* cinq_meta.c */
 extern struct cinq_file_systems file_systems;
