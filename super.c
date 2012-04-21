@@ -15,7 +15,6 @@
 
 static struct thread_task journal_thread;
 static struct cinq_journal cinq_journal;
-static struct kmem_cache *cinq_jentry_cachep;
 
 // @data: can be NULL
 static int cinq_fill_super_(struct super_block *sb, void *data, int silent) {
@@ -98,16 +97,16 @@ THREAD_FUNC_(journal_writeback)(void *data) {
       int key_size = sizeof(entry->key);
       switch (entry->action) {
         case CREATE:
-          fprintf(stderr, "journal (%d)\t- CREATE key %lx(%d).\n",
-                  ++num, *((unsigned long *)entry->key), key_size);
+          DEBUG_("journal (%d)\t- CREATE key %lx(%d).\n",
+                 ++num, *((unsigned long *)entry->key), key_size);
           break;
         case UPDATE:
-          fprintf(stderr, "journal (%d)\t- UPDATE key %lx(%d).\n",
-                  ++num, *((unsigned long *)entry->key), key_size);
+          DEBUG_("journal (%d)\t- UPDATE key %lx(%d).\n",
+                 ++num, *((unsigned long *)entry->key), key_size);
           break;
         case DELETE:
-          fprintf(stderr, "journal (%d)\t- UPDATE key %lx(%d).\n",
-                  ++num, *((unsigned long *)entry->key), key_size);
+          DEBUG_("journal (%d)\t- UPDATE key %lx(%d).\n",
+                 ++num, *((unsigned long *)entry->key), key_size);
           break;
         default:
           DEBUG_("[Error@journal_writeback] journal entry action is NOT valid:"

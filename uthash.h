@@ -87,7 +87,7 @@ typedef u8 uint8_t;
 
 extern struct kmem_cache *UT_hash_table_cachep;
 
-static inline void *UT_hash_table_malloc() {
+static inline void *UT_hash_table_malloc(void) {
 	void *p = (struct UT_hash_table *)kmem_cache_alloc(UT_hash_table_cachep, GFP_KERNEL);
   while (!p) {
     printk(KERN_WARNING "[Warn@safe_malloc] kmalloc failed, retrying.");

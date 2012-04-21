@@ -24,6 +24,8 @@
 #include <linux/spinlock.h>
 #include <linux/time.h>
 #include <linux/list.h>
+#include <linux/pagemap.h>
+#include <linux/delay.h>
 
 #else
 
@@ -81,10 +83,6 @@ typedef pthread_mutex_t spinlock_t;
 #define spin_trylock(lock_p) (pthread_mutex_trylock(lock_p))
 #define spin_unlock(lock_p) (pthread_mutex_unlock(lock_p))
 
-#define rd_release_return(lock_p, err) return (read_unlock(lock_p), err)
-#define wr_release_return(lock_p, err) return (write_unlock(lock_p), err)
-#define sp_release_return(lock_p, err) return (spin_unlock(lock_p), err)
-
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
@@ -133,6 +131,8 @@ static inline long PTR_ERR(const void *ptr) { // include/linux/err.h
 #define DEBUG_(...) (printk(KERN_DEBUG __VA_ARGS__))
 #endif // CINQ_DEBUG
 
+#define malloc(n) kmalloc(n, GFP_KERNEL)
+
 #define inode_malloc_() \
     ((struct inode *)vmalloc(sizeof(struct inode)))
 #define inode_free_(p) (vfree(p))
@@ -140,6 +140,8 @@ static inline long PTR_ERR(const void *ptr) { // include/linux/err.h
 #define tag_malloc_() \
     ((struct cinq_tag *)vmalloc(sizeof(struct cinq_tag)))
 #define tag_free_(p) (vfree(p))
+
+#define sleep(n) ssleep(n)
 
 #else
 /* User space (exchangable) */
@@ -157,8 +159,6 @@ static inline long PTR_ERR(const void *ptr) { // include/linux/err.h
     ((struct cinq_tag *)malloc(sizeof(struct cinq_tag)))
 #define tag_free_(p) (free(p))
 
-#define kmalloc(n) malloc(n)
-
 #define CURRENT_TIME ((struct timespec) { time(NULL), 0 })
 
 #endif // __KERNEL__
@@ -174,6 +174,10 @@ static inline long PTR_ERR(const void *ptr) { // include/linux/err.h
 #define FS_DELIM "."
 
 #define META_FS ((void *)-EPERM)
+
+#define rd_release_return(lock_p, err) return (read_unlock(lock_p), err)
+#define wr_release_return(lock_p, err) return (write_unlock(lock_p), err)
+#define sp_release_return(lock_p, err) return (spin_unlock(lock_p), err)
 
 #define HASH_FIND_BY_STR(hh, head, findstr, out) \
     HASH_FIND(hh, head, findstr, strlen(findstr), out)

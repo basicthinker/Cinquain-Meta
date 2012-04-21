@@ -25,7 +25,7 @@ typedef struct task_struct thread_t;
     int (name)
 #define THREAD_RETURN_ return 0
 
-#define thread_should_stop() pthread_should_stop()
+#define thread_should_stop() kthread_should_stop()
 
 #else
 /* User-space definition */
@@ -39,8 +39,8 @@ typedef pthread_t thread_t;
 #define THREAD_RETURN_ pthread_exit(NULL)
 
 #define set_current_state(state)
+
 #define thread_should_stop() 0
-#define msleep(msec) sleep(msec / 1000)
 
 #endif // __KERNEL__
 

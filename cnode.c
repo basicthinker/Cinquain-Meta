@@ -86,8 +86,9 @@ static inline struct cinq_tag *cnode_find_tag_(const struct cinq_inode *cnode,
 
 static inline struct cinq_tag *cnode_find_tag_syn(struct cinq_inode *cnode,
                                                   struct cinq_fsnode *fs) {
+  struct cinq_tag *tag;
   read_lock(&cnode->ci_tags_lock);
-  struct cinq_tag *tag = cnode_find_tag_(cnode, fs);
+  tag = cnode_find_tag_(cnode, fs);
   read_unlock(&cnode->ci_tags_lock);
   return tag;
 }
@@ -147,8 +148,9 @@ static inline struct cinq_inode *cnode_find_child_(struct cinq_inode *parent,
 
 static inline struct cinq_inode *cnode_find_child_syn(struct cinq_inode *parent,
                                                       const char *name) {
+  struct cinq_inode *child;
   read_lock(&parent->ci_children_lock);
-  struct cinq_inode *child = cnode_find_child_(parent, name);
+  child = cnode_find_child_(parent, name);
   read_unlock(&parent->ci_children_lock);
   return child;
 }
@@ -189,12 +191,13 @@ struct inode *cnode_lookup_inode(struct cinq_inode *cnode, struct cinq_fsnode *f
 }
 
 static void cnode_evict(struct cinq_inode *cnode) {
+  struct cinq_inode *parent;
   if (cnode->ci_tags || cnode->ci_children) {
     DEBUG_("[Error@cnode_evict] failed to delete cnode %lx "
            "who still has tags or children.\n", cnode->ci_id);
     return;
   }
-  struct cinq_inode *parent = cnode->ci_parent;
+  parent = cnode->ci_parent;
   if (!cnode_is_root_(cnode) && parent) {
     cnode_rm_child_syn(parent, cnode);
   }
@@ -471,7 +474,8 @@ static int cinq_mkinode_(struct inode *dir, struct dentry *dentry,
 int cinq_create(struct inode *dir, struct dentry *dentry,
                 int mode, struct nameidata *nameidata) {
   dentry->d_fsdata = nameidata ?
-      nameidata->path.dentry->d_fsdata : dentry->d_parent->d_fsdata;
+      nameidata->path.dentry->d_fsdata :
+      dentry->d_parent->d_fsdata;
   if (!dentry->d_fsdata) {
     DEBUG_("[Error@cinq_create] no fsnode is specified.\n");
     return -EINVAL;
@@ -492,7 +496,7 @@ int cinq_symlink(struct inode *dir, struct dentry *dentry,
     struct inode *inode = dentry->d_inode;
     struct cinq_tag *tag = i_tag(inode);
     int size = sizeof(symname);
-    tag->t_symname = (char *)kmalloc(size);
+    tag->t_symname = (char *)malloc(size);
     if (!tag->t_symname) return -ENOSPC;
     memcpy(tag->t_symname, symname, size);
   }
@@ -508,7 +512,8 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
     struct cinq_fsnode *fsnodes[2] = { NULL, NULL };
     char *cur = namestr;
     char *token = strsep(&cur, FS_DELIM);
-    for (int i = 0; token && i < 2; token = strsep(&cur, FS_DELIM), ++i) {
+    int i;
+    for (i = 0; token && i < 2; token = strsep(&cur, FS_DELIM), ++i) {
       fsnames[i] = token;
       fsnodes[i] = cfs_find_syn(&file_systems, token);
     }

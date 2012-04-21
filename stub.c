@@ -10,7 +10,10 @@
 //  Created by Jinglei Ren <jinglei.ren@gmail.com> on 3/11/12.
 //
 
+#ifndef __KERNEL__
+
 #include "vfs.h"
+#include "util.h"
 
 #define IS_ROOT(x) ((x) == (x)->d_parent)
 
@@ -442,3 +445,4 @@ void put_filp(struct file *file)
 //  }
 }
 
+#endif // __KERNEL__

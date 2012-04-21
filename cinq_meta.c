@@ -11,6 +11,7 @@
 //
 
 #include "cinq_meta.h"
+#include "util.h"
 
 #ifdef __KERNEL__
 #include <linux/module.h>
@@ -18,7 +19,7 @@
 #endif
 
 struct cinq_file_systems file_systems = {
-  .lock = RW_LOCK_UNLOCKED,
+  .lock = __RW_LOCK_UNLOCKED(lock),
   .cfs_table = NULL
 };
 
@@ -73,6 +74,7 @@ const struct file_operations cinq_dir_operations = {
 #ifdef __KERNEL__
 
 struct kmem_cache *UT_hash_table_cachep;
+struct kmem_cache *cinq_jentry_cachep;
 
 static int __init init_cinq_fs(void) {
   int err;
@@ -91,6 +93,9 @@ static int __init init_cinq_fs(void) {
 
   err = register_filesystem(&cinqfs);
   if (err) goto unregister;
+
+  DEBUG_("sinqfs: loaded successfully.");
+  return 0;
 
 free_hash:
   destroy_UT_hash_table_cache();

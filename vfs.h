@@ -802,6 +802,8 @@ static inline void setattr_copy(struct inode *inode, const struct iattr *attr)
 #else
 
 #include <linux/fs.h>
+#include <linux/namei.h>
+#include <linux/buffer_head.h>
 
 #endif // __KERNEL__
 #endif // CINQUAIN_META_VFS_H_

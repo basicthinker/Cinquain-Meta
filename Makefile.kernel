@@ -1,7 +1,7 @@
 KSRC = /lib/modules/`uname -r`/build
 
 obj-m += cinqfs.o
-cinqfs-objs := cinq_meta.o cnode.o file.o fsnode.o stub.o super.o test.o vfs.o cinq_meta.o cnode.o file.o fsnode.o stub.o super.o test.o vfs.o
+cinqfs-objs := cinq_meta.o cnode.o file.o fsnode.o stub.o super.o vfs.o
 
 default:
 	$(MAKE) -C $(KSRC) M=`pwd`
