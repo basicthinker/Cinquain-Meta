@@ -90,7 +90,7 @@ typedef pthread_mutex_t spinlock_t;
 
 #define CURRENT_TIME_SEC ((struct timespec) { time(NULL), 0 })
 
-static inline void * ERR_PTR(long error) { // include/linux/err.h
+static inline void *ERR_PTR(long error) { // include/linux/err.h
   return (void *) error;
 }
 
@@ -166,7 +166,7 @@ static inline long PTR_ERR(const void *ptr) { // include/linux/err.h
 
 /* Non-portability utilities */
 
-#include "uthash/uthash.h"
+#include "uthash.h"
 
 #define CINQ_MAGIC 0x3122
 #define FILE_HASH_WIDTH 16 // bytes

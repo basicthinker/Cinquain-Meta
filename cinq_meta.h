@@ -13,9 +13,8 @@
 #ifndef CINQUAIN_META_CINQ_META_H_
 #define CINQUAIN_META_CINQ_META_H_
 
-#include "journal.h"
 #include "vfs.h"
-#include "thread.h"
+#include "journal.h"
 
 /* Cinquain File System Data Structures and Operations */
 
@@ -187,12 +186,6 @@ extern struct inode *cinq_alloc_inode(struct super_block *sb);
 
 extern void cinq_evict_inode(struct inode *inode);
 
-extern struct cinq_journal cinq_journal;
-
-extern struct thread_task journal_thread;
-
-extern THREAD_FUNC_(journal_writeback)(void *data);
-
 extern void journal_fsnode(struct cinq_fsnode *fsnode,
                            enum journal_action action);
 extern void journal_cnode(struct cinq_inode *cnode,
@@ -267,7 +260,7 @@ extern int generic_readlink(struct dentry *dentry, char *buffer, int buflen);
 
 /* cinq_meta.c */
 extern struct cinq_file_systems file_systems;
-extern const struct file_system_type cinqfs;
+extern struct file_system_type cinqfs;
 extern const struct super_operations cinq_super_operations;
 extern const struct inode_operations cinq_dir_inode_operations;
 extern const struct inode_operations cinq_file_inode_operations;

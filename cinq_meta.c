@@ -12,12 +12,17 @@
 
 #include "cinq_meta.h"
 
+#ifdef __KERNEL__
+#include <linux/module.h>
+#include <linux/init.h>
+#endif
+
 struct cinq_file_systems file_systems = {
   .lock = RW_LOCK_UNLOCKED,
   .cfs_table = NULL
 };
 
-const struct file_system_type cinqfs = {
+struct file_system_type cinqfs = {
   .name = "cinqfs",
 #ifdef __KERNEL__
   .owner = THIS_MODULE,
@@ -64,3 +69,53 @@ const struct file_operations cinq_file_operations = {
 const struct file_operations cinq_dir_operations = {
   .readdir  = cinq_readdir
 };
+
+#ifdef __KERNEL__
+
+struct kmem_cache *UT_hash_table_cachep;
+
+static int __init init_cinq_fs(void) {
+  int err;
+
+  err = init_cnode_cache();
+  if (err) goto free_cnode;
+
+  err = init_fsnode_cache();
+  if (err) goto free_fsnode;
+
+  err = init_jentry_cache();
+  if (err) goto free_jentry;
+
+  err = init_UT_hash_table_cache();
+  if (err) goto free_hash;
+
+  err = register_filesystem(&cinqfs);
+  if (err) goto unregister;
+
+free_hash:
+  destroy_UT_hash_table_cache();
+free_jentry:
+  destroy_jentry_cache();
+free_fsnode:
+  destroy_fsnode_cache();
+free_cnode:
+  destroy_cnode_cache();
+unregister:
+  unregister_filesystem(&cinqfs);
+  return err;
+}
+
+static void __exit exit_cinq_fs(void) {
+  destroy_cnode_cache();
+  destroy_fsnode_cache();
+  destroy_jentry_cache();
+  destroy_UT_hash_table_cache();
+  unregister_filesystem(&cinqfs);
+}
+
+module_init(init_cinq_fs);
+module_exit(exit_cinq_fs);
+MODULE_LICENSE("GPL");
+
+#endif
+

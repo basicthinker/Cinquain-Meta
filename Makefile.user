@@ -7,13 +7,7 @@ KSRC = /lib/modules/`uname -r`/build
 SRC := $(wildcard *.c)
 OBJ := $(SRC:%.c=$(OBJDIR)/%.o)
 
-obj-m := cinqfs.o
-cinqfs-objs := $(OBJ)
-
 all : dir test
-
-modules: all
-	$(MAKE) -C $(KSRC) M=`pwd`
 
 test: $(OBJ)
 	$(CC) $(EXTRA_CFLAGS) $(LIB) -o $@ $^
@@ -28,4 +22,3 @@ dir :
 
 clean :
 	rm -rf $(OBJDIR) test
-	$(MAKE) -C $(KSRC) M=`pwd` clean

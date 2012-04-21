@@ -293,6 +293,7 @@ static int example_filldir(void *dirent, const char *name, int name_len,
   
   // the rest part is only for test purpose
   if (strcmp(name, ".") && strcmp(name, "..") &&
+      strcmp("/", i_cnode(inode)->ci_name) &&
       strcmp(name, i_cnode(inode)->ci_name)) {
     DEBUG_("[Error@example_filldir] extracted inode not matched for %s.\n",
            name);

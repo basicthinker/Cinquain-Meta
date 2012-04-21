@@ -4,7 +4,7 @@
  */
 
 //
-//  inode.c
+//  cnode.c
 //  cinquain-meta
 //
 //  Created by Jinglei Ren <jinglei.ren@gmail.com> on 3/11/12.
@@ -285,7 +285,6 @@ static void cnode_tag_ancestors_(const struct dentry *dentry) {
 
 static inline void tag_evict(struct cinq_tag *tag) {
   if (tag->t_inode) {
-    tag->t_inode->i_nlink = S_ISDIR(tag->t_inode->i_mode) ? 2 : 1;
     inode_free_(tag->t_inode);
 
 #ifdef CINQ_DEBUG
@@ -804,7 +803,7 @@ int cinq_setattr(struct dentry *dentry, struct iattr *attr) {
 
 #ifdef __KERNEL__
 
-int init_cnode_cache(void) {
+int __init init_cnode_cache(void) {
   cinq_inode_cachep = kmem_cache_create(
       "cinq_inode_cache", sizeof(struct cinq_inode), 0,
       (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD), NULL);
@@ -813,7 +812,7 @@ int init_cnode_cache(void) {
   return 0;
 }
 
-void destroy_cnode_cache(void) {
+void __exit destroy_cnode_cache(void) {
   kmem_cache_destroy(cinq_inode_cachep);
 }
 

@@ -107,4 +107,7 @@ static inline int thread_stop(struct thread_task *thr_task) {
 
 #endif // __KERNEL__
 
+// super.c
+extern THREAD_FUNC_(journal_writeback)(void *data);
+
 #endif // CINQUAIN_META_THREAD_H_

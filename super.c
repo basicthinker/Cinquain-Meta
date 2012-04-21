@@ -11,10 +11,11 @@
 //
 
 #include "cinq_meta.h"
+#include "thread.h"
 
-struct thread_task journal_thread;
-
-struct cinq_journal cinq_journal;
+static struct thread_task journal_thread;
+static struct cinq_journal cinq_journal;
+static struct kmem_cache *cinq_jentry_cachep;
 
 // @data: can be NULL
 static int cinq_fill_super_(struct super_block *sb, void *data, int silent) {

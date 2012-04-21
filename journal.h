@@ -14,7 +14,6 @@
 #define CINQUAIN_META_LOG_H_
 
 #include "util.h"
-#include "list.h"
 
 enum journal_action {
   CREATE = 0,
@@ -31,7 +30,7 @@ struct cinq_jentry {
 
 #ifdef __KERNEL__
 
-static struct kmem_cache *cinq_jentry_cachep;
+extern struct kmem_cache *cinq_jentry_cachep;
 
 #define jentry_malloc_() \
     ((struct cinq_jentry *)kmem_cache_alloc(cinq_jentry_cachep, GFP_KERNEL))
@@ -89,6 +88,7 @@ static inline void journal_add_syn(struct cinq_journal *journal,
   list_add_tail(&entry->list, &journal->list);
   spin_unlock(&journal->lock);
 }
+
 
 #ifdef __KERNEL__
 

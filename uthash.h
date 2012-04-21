@@ -1,4 +1,5 @@
 /*
+Copyright (c) 2012, Jinglei Ren <jinglei.ren@stanzax.org>
 Copyright (c) 2003-2011, Troy D. Hanson     http://uthash.sourceforge.net
 All rights reserved.
 
@@ -24,7 +25,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef UTHASH_H
 #define UTHASH_H 
 
-#ifdef __KERNEL__
+#ifdef __KERNEL__ // Introduced by Jinglei Ren <jinglei.ren@gmail.com>
 #include <linux/types.h>
 #include <linux/string.h>
 #define exit(n) do { \
@@ -71,7 +72,7 @@ typedef unsigned int uint32_t;
 typedef unsigned char uint8_t;
 #else
 
-#ifdef __KERNEL__
+#ifdef __KERNEL__ // Introduced by Jinglei Ren <jinglei.ren@gmail.com>
 typedef u32 uint32_t;
 typedef u8 uint8_t;
 #else
@@ -82,9 +83,34 @@ typedef u8 uint8_t;
 
 #define UTHASH_VERSION 1.9.4
 
-#define uthash_fatal(msg) exit(-1)        /* fatal error (out of memory,etc) */
+#ifdef __KERNEL__ // Introduced by Jinglei Ren <jinglei.ren@gmail.com>
+
+extern struct kmem_cache *UT_hash_table_cachep;
+
+static inline void *UT_hash_table_malloc() {
+	void *p = (struct UT_hash_table *)kmem_cache_alloc(UT_hash_table_cachep, GFP_KERNEL);
+  while (!p) {
+    printk(KERN_WARNING "[Warn@safe_malloc] kmalloc failed, retrying.");
+    p = (struct UT_hash_table *)kmem_cache_alloc(UT_hash_table_cachep, GFP_KERNEL);
+  }
+	return p;
+}
+#define UT_hash_table_free(p) (kmem_cache_free(UT_hash_table_cachep, p))
+
+#define uthash_malloc(sz) kmalloc(sz, GFP_KERNEL | __GFP_NOFAIL)
+#define uthash_free(ptr,sz) kfree(ptr)
+
+#else
+
 #define uthash_malloc(sz) malloc(sz)      /* malloc fcn                      */
 #define uthash_free(ptr,sz) free(ptr)     /* free fcn                        */
+#define UT_hash_table_malloc() \
+		(struct UT_hash_table *)malloc(sizeof(struct UT_hash_table))
+#define UT_hash_table_free(p) free(p)
+
+#endif // __KERNEL__
+
+#define uthash_fatal(msg) exit(-1)        /* fatal error (out of memory,etc) */
 
 #define uthash_noexpand_fyi(tbl)          /* can be defined to log noexpand  */
 #define uthash_expand_fyi(tbl)            /* can be defined to log expands   */
@@ -145,8 +171,7 @@ do {                                                                            
 
 #define HASH_MAKE_TABLE(hh,head)                                                 \
 do {                                                                             \
-  (head)->hh.tbl = (UT_hash_table*)uthash_malloc(                                \
-                  sizeof(UT_hash_table));                                        \
+  (head)->hh.tbl = UT_hash_table_malloc();                                       \
   if (!((head)->hh.tbl))  { uthash_fatal( "out of memory"); }                    \
   memset((head)->hh.tbl, 0, sizeof(UT_hash_table));                              \
   (head)->hh.tbl->tail = &((head)->hh);                                          \
@@ -215,7 +240,7 @@ do {                                                                            
         uthash_free((head)->hh.tbl->buckets,                                     \
                     (head)->hh.tbl->num_buckets*sizeof(struct UT_hash_bucket) ); \
         HASH_BLOOM_FREE((head)->hh.tbl);                                         \
-        uthash_free((head)->hh.tbl, sizeof(UT_hash_table));                      \
+        UT_hash_table_free((head)->hh.tbl);                      \
         head = NULL;                                                             \
     } else {                                                                     \
         _hd_hh_del = &((delptr)->hh);                                            \
@@ -264,7 +289,7 @@ do {                                                                            
  */
 #ifdef HASH_DEBUG
 
-#ifdef __KERNEL__
+#ifdef __KERNEL__ // Introduced by Jinglei Ren <jinglei.ren@gmail.com>
 #define HASH_OOPS(...) do { printk(KERN_ERR __VA_ARGS__); exit(-1); } while (0)
 #else
 #define HASH_OOPS(...) do { fprintf(stderr,__VA_ARGS__); exit(-1); } while (0)
@@ -837,7 +862,7 @@ do {                                                                            
     uthash_free((head)->hh.tbl->buckets,                                         \
                 (head)->hh.tbl->num_buckets*sizeof(struct UT_hash_bucket));      \
     HASH_BLOOM_FREE((head)->hh.tbl);                                             \
-    uthash_free((head)->hh.tbl, sizeof(UT_hash_table));                          \
+    UT_hash_table_free((head)->hh.tbl);                          \
     (head)=NULL;                                                                 \
   }                                                                              \
 } while(0)
@@ -923,5 +948,22 @@ typedef struct UT_hash_handle {
    unsigned keylen;                  /* enclosing struct's key len     */
    unsigned hashv;                   /* result of hash-fcn(key)        */
 } UT_hash_handle;
+
+#ifdef __KERNEL__ // Introduced by Jinglei Ren <jinglei.ren@gmail.com>
+
+static int init_UT_hash_table_cache(void) {
+  UT_hash_table_cachep = kmem_cache_create(
+      "UT_hash_table_cache", sizeof(struct UT_hash_table), 0,
+      (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD), NULL);
+  if (UT_hash_table_cachep == NULL)
+    return -ENOMEM;
+  return 0;
+}
+
+static void destroy_UT_hash_table_cache(void) {
+  kmem_cache_destroy(UT_hash_table_cachep);
+}
+
+#endif // __KERNEL__
 
 #endif /* UTHASH_H */

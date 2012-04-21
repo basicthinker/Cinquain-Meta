@@ -1,5 +1,7 @@
 tags
 *.1
+*.o
+*.o.*
 test
 *.tmp
 *.log
