@@ -68,44 +68,49 @@ struct cinq_file_systems {
   struct cinq_fsnode *cfs_table;
 };
 
-static inline struct cinq_fsnode *cfs_find_(struct cinq_file_systems *table,
+static inline void cfs_init(struct cinq_file_systems *cfs) {
+  rwlock_init(&cfs->lock);
+  cfs->cfs_table = NULL;
+}
+
+static inline struct cinq_fsnode *cfs_find_(struct cinq_file_systems *cfs,
                                             const char *name) {
   struct cinq_fsnode *fsnode;
-  HASH_FIND_BY_STR(fs_member, table->cfs_table, name, fsnode);
+  HASH_FIND_BY_STR(fs_member, cfs->cfs_table, name, fsnode);
   return fsnode;
 }
 
-static inline struct cinq_fsnode *cfs_find_syn(struct cinq_file_systems *table,
+static inline struct cinq_fsnode *cfs_find_syn(struct cinq_file_systems *cfs,
                                                const char *name) {
   struct cinq_fsnode *fsnode;
-  read_lock(&table->lock);
-  fsnode = cfs_find_(table, name);
-  read_unlock(&table->lock);
+  read_lock(&cfs->lock);
+  fsnode = cfs_find_(cfs, name);
+  read_unlock(&cfs->lock);
   return fsnode;
 }
 
-static inline void cfs_add_(struct cinq_file_systems *table,
+static inline void cfs_add_(struct cinq_file_systems *cfs,
                             struct cinq_fsnode *fs) {
-  HASH_ADD_BY_STR(fs_member, table->cfs_table, fs_name, fs);
+  HASH_ADD_BY_STR(fs_member, cfs->cfs_table, fs_name, fs);
 }
 
-static inline void cfs_add_syn(struct cinq_file_systems *table,
+static inline void cfs_add_syn(struct cinq_file_systems *cfs,
                                struct cinq_fsnode *fs) {
-  write_lock(&table->lock);
-  cfs_add_(table, fs);
-  write_unlock(&table->lock);
+  write_lock(&cfs->lock);
+  cfs_add_(cfs, fs);
+  write_unlock(&cfs->lock);
 }
 
-static inline void cfs_rm_(struct cinq_file_systems *table,
+static inline void cfs_rm_(struct cinq_file_systems *cfs,
                            struct cinq_fsnode *fs) {
-  HASH_DELETE(fs_member, table->cfs_table, fs);
+  HASH_DELETE(fs_member, cfs->cfs_table, fs);
 }
 
-static inline void cfs_rm_syn(struct cinq_file_systems *table,
+static inline void cfs_rm_syn(struct cinq_file_systems *cfs,
                               struct cinq_fsnode *fs) {
-  write_lock(&table->lock);
-  cfs_rm_(table, fs);
-  write_unlock(&table->lock);
+  write_lock(&cfs->lock);
+  cfs_rm_(cfs, fs);
+  write_unlock(&cfs->lock);
 }
 
 struct cinq_inode;
@@ -177,6 +182,7 @@ static inline int inode_meta_root(const struct inode *inode) {
          fs = fs->fs_parent, tag = cnode_find_tag_(cnode, fs))
 
 /* super.c */
+extern struct cinq_file_systems file_systems;
 
 extern struct dentry *cinq_mount (struct file_system_type *fs_type, int flags,
                                   const char *dev_name, void *data);
@@ -259,7 +265,6 @@ extern int cinq_readdir (struct file * filp, void * dirent, filldir_t filldir);
 extern int generic_readlink(struct dentry *dentry, char *buffer, int buflen);
 
 /* cinq_meta.c */
-extern struct cinq_file_systems file_systems;
 extern struct file_system_type cinqfs;
 extern const struct super_operations cinq_super_operations;
 extern const struct inode_operations cinq_dir_inode_operations;

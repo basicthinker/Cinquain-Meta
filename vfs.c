@@ -223,16 +223,12 @@ static inline struct inode *alloc_inode_(struct super_block *sb)
 	struct inode *inode;
   
 	if (sb->s_op->alloc_inode)
-		inode = sb->s_op->alloc_inode(sb); // no specific alloc function
+		inode = sb->s_op->alloc_inode(sb);
 	else
 		inode = inode_malloc_();
   
 	if (!inode)
 		return NULL;
-  
-#ifdef CINQ_DEBUG
-  atomic_inc(&num_inode_);
-#endif // CINQ_DEBUG
   
   // inode_init_once // expanded as following
   memset(inode, 0, sizeof(*inode));

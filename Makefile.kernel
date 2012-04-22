@@ -1,7 +1,8 @@
+ccflags-y := -std=gnu99 -Os -DCINQ_DEBUG -DHASH_DEBUG=1
 KSRC = /lib/modules/`uname -r`/build
 
 obj-m += cinqfs.o
-cinqfs-objs := cinq_meta.o cnode.o file.o fsnode.o stub.o super.o vfs.o
+cinqfs-objs := cinq_meta.o cnode.o file.o fsnode.o super.o
 
 default:
 	$(MAKE) -C $(KSRC) M=`pwd`

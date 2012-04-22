@@ -43,8 +43,10 @@
 #endif
 
 #ifdef CINQ_DEBUG
-atomic_t num_dentry_;
-atomic_t num_inode_;
+#ifndef __KERNEL__
+extern atomic_t num_dentry_;
+#endif // __KERNEL__
+extern atomic_t num_inode_;
 #endif // CINQ_DEBUG
 
 #ifndef CINQ_DEBUG
@@ -69,7 +71,6 @@ typedef uint64_t u64;
 typedef unsigned fmode_t;
 
 typedef pthread_rwlock_t rwlock_t;
-#define RW_LOCK_UNLOCKED PTHREAD_RWLOCK_INITIALIZER
 #define rwlock_init(lock_p) (pthread_rwlock_init(lock_p, NULL))
 #define read_lock(lock_p) (pthread_rwlock_rdlock(lock_p))
 #define read_unlock(lock_p) (pthread_rwlock_unlock(lock_p))

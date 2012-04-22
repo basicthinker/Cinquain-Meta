@@ -951,7 +951,7 @@ typedef struct UT_hash_handle {
 
 #ifdef __KERNEL__ // Introduced by Jinglei Ren <jinglei.ren@gmail.com>
 
-static int init_UT_hash_table_cache(void) {
+static inline int init_UT_hash_table_cache(void) {
   UT_hash_table_cachep = kmem_cache_create(
       "UT_hash_table_cache", sizeof(struct UT_hash_table), 0,
       (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD), NULL);
@@ -960,7 +960,7 @@ static int init_UT_hash_table_cache(void) {
   return 0;
 }
 
-static void destroy_UT_hash_table_cache(void) {
+static inline void destroy_UT_hash_table_cache(void) {
   kmem_cache_destroy(UT_hash_table_cachep);
 }
 

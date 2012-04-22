@@ -13,8 +13,16 @@
 #include "cinq_meta.h"
 #include "thread.h"
 
+struct cinq_file_systems file_systems;
 static struct thread_task journal_thread;
 static struct cinq_journal cinq_journal;
+
+#ifdef CINQ_DEBUG
+#ifndef __KERNEL__
+atomic_t num_dentry_;
+#endif
+atomic_t num_inode_;
+#endif // CINQ_DEBUG
 
 // @data: can be NULL
 static int cinq_fill_super_(struct super_block *sb, void *data, int silent) {
@@ -51,6 +59,7 @@ static int cinq_fill_super_(struct super_block *sb, void *data, int silent) {
 
 struct dentry *cinq_mount(struct file_system_type *fs_type, int flags,
                            const char *dev_name, void *data) {
+  cfs_init(&file_systems);
   journal_init(&cinq_journal, "Cinquain");
   thread_init(&journal_thread, journal_writeback, &cinq_journal,
               "cinquain-journal");
@@ -73,7 +82,15 @@ void cinq_kill_sb(struct super_block *sb) {
 }
 
 struct inode *cinq_alloc_inode(struct super_block *sb) {
-  return inode_malloc_();
+  struct inode *inode = inode_malloc_();
+  INIT_LIST_HEAD(&inode->i_dentry);
+
+#ifdef __KERNEL__
+  inode_init_once(inode);
+#endif
+#ifdef CINQ_DEBUG
+  atomic_inc(&num_inode_);
+#endif // CINQ_DEBUG
 }
 
 // Not actually delte inodes since they are in-memory

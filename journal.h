@@ -92,7 +92,7 @@ static inline void journal_add_syn(struct cinq_journal *journal,
 
 #ifdef __KERNEL__
 
-static int init_jentry_cache(void) {
+static inline int init_jentry_cache(void) {
   cinq_jentry_cachep = kmem_cache_create(
       "cinq_jentry_cache", sizeof(struct cinq_jentry), 0,
       (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD), NULL);
@@ -101,7 +101,7 @@ static int init_jentry_cache(void) {
   return 0;
 }
 
-static void destroy_jentry_cache(void) {
+static inline void destroy_jentry_cache(void) {
   kmem_cache_destroy(cinq_jentry_cachep);
 }
 

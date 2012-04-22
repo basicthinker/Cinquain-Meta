@@ -18,11 +18,6 @@
 #include <linux/init.h>
 #endif
 
-struct cinq_file_systems file_systems = {
-  .lock = __RW_LOCK_UNLOCKED(lock),
-  .cfs_table = NULL
-};
-
 struct file_system_type cinqfs = {
   .name = "cinqfs",
 #ifdef __KERNEL__
