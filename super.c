@@ -91,6 +91,8 @@ struct inode *cinq_alloc_inode(struct super_block *sb) {
 #ifdef CINQ_DEBUG
   atomic_inc(&num_inode_);
 #endif // CINQ_DEBUG
+  
+  return inode;
 }
 
 // Not actually delte inodes since they are in-memory
@@ -133,7 +135,7 @@ THREAD_FUNC_(journal_writeback)(void *data) {
     }
     
     set_current_state(TASK_INTERRUPTIBLE);
-    msleep(1000);
+    sleep(1);
   }
   THREAD_RETURN_;
 }

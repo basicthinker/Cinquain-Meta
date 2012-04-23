@@ -475,6 +475,8 @@ struct file {
   //#endif
 };
 
+// vfs.c
+extern int generic_readlink(struct dentry *dentry, char *buffer, int buflen);
 extern int get_write_access(struct inode * inode);
 extern int deny_write_access(struct file * file);
 static inline void put_write_access(struct inode * inode) {

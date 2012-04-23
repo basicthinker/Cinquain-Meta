@@ -261,8 +261,6 @@ extern ssize_t cinq_write(struct file *filp, const char *buf, size_t len,
 extern int cinq_release_file (struct inode * inode, struct file * filp);
 
 extern int cinq_readdir (struct file * filp, void * dirent, filldir_t filldir);
-// vfs.c
-extern int generic_readlink(struct dentry *dentry, char *buffer, int buflen);
 
 /* cinq_meta.c */
 extern struct file_system_type cinqfs;
