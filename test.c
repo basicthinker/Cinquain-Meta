@@ -83,7 +83,7 @@ static inline void print_dir_tree(struct cinq_inode *root) {
 // Includes examples for file system registration
 static void make_fs_tree(struct dentry *droot) {
   struct inode *iroot = droot->d_inode;
-  int mode = S_IFDIR | S_IRWXO | S_IRGRP;
+  int mode = S_IFDIR | S_IRWXU | S_IRGRP | S_IXGRP;
   struct dentry *dent;
 
   // make file-system tree by invoking cinq_mkdir

@@ -452,4 +452,108 @@ struct file *dentry_open(struct dentry *dentry, struct vfsmount *mnt, int flags,
 	return __dentry_open(dentry, mnt, f, NULL, cred);
 }
 
+
+static int __negative_fpos_check(struct file *file, loff_t pos, size_t count)
+{
+	/*
+	 * pos or pos+count is negative here, check overflow.
+	 * too big "count" will be caught in rw_verify_area().
+	 */
+	if ((pos < 0) && (pos + count < pos))
+		return -EOVERFLOW;
+	if (file->f_mode & FMODE_UNSIGNED_OFFSET)
+		return 0;
+	return -EINVAL;
+}
+
+/**
+ * generic_file_llseek_unlocked - lockless generic llseek implementation
+ * @file:	file structure to seek on
+ * @offset:	file offset to seek to
+ * @origin:	type of seek
+ *
+ * Updates the file offset to the value specified by @offset and @origin.
+ * Locking must be provided by the caller.
+ */
+static inline loff_t generic_file_llseek_unlocked(struct file *file,
+                                                  loff_t offset, int origin) {
+	struct inode *inode = file->f_dentry->d_inode; // file->f_mapping->host;
+  
+	switch (origin) {
+    case SEEK_END:
+      offset += inode->i_size;
+      break;
+    case SEEK_CUR:
+      /*
+       * Here we special-case the lseek(fd, 0, SEEK_CUR)
+       * position-querying operation.  Avoid rewriting the "same"
+       * f_pos value back to the file because a concurrent read(),
+       * write() or lseek() might have altered it
+       */
+      if (offset == 0)
+        return file->f_pos;
+      offset += file->f_pos;
+      break;
+	}
+  
+	if (offset < 0 && __negative_fpos_check(file, offset, 0))
+		return -EINVAL;
+	if (offset > inode->i_sb->s_maxbytes)
+		return -EINVAL;
+  
+	/* Special lock needed here? */
+	if (offset != file->f_pos) {
+		file->f_pos = offset;
+		file->f_version = 0;
+	}
+  
+	return offset;
+}
+
+/**
+ * generic_file_llseek - generic llseek implementation for regular files
+ * @file:	file structure to seek on
+ * @offset:	file offset to seek to
+ * @origin:	type of seek
+ *
+ * This is a generic implemenation of ->llseek useable for all normal local
+ * filesystems.  It just updates the file offset to the value specified by
+ * @offset and @origin under i_mutex.
+ */
+loff_t generic_file_llseek(struct file *file, loff_t offset, int origin)
+{
+	loff_t rval;
+  
+	mutex_lock(&file->f_dentry->d_inode->i_mutex);
+	rval = generic_file_llseek_unlocked(file, offset, origin);
+	mutex_unlock(&file->f_dentry->d_inode->i_mutex);
+  
+	return rval;
+}
+
+static inline void generic_fillattr(struct inode *inode, struct kstat *stat)
+{
+	stat->dev = inode->i_sb->s_dev;
+	stat->ino = inode->i_ino;
+	stat->mode = inode->i_mode;
+	stat->nlink = inode->i_nlink;
+	stat->uid = inode->i_uid;
+	stat->gid = inode->i_gid;
+	stat->rdev = inode->i_rdev;
+	stat->atime = inode->i_atime;
+	stat->mtime = inode->i_mtime;
+	stat->ctime = inode->i_ctime;
+	stat->size = inode->i_size; // i_size_read(inode);
+	stat->blocks = inode->i_blocks;
+	stat->blksize = (1 << inode->i_blkbits);
+}
+
+int simple_getattr(struct vfsmount *mnt, struct dentry *dentry,
+                   struct kstat *stat) {
+  struct inode *inode = dentry->d_inode;
+  generic_fillattr(inode, stat);
+//  stat->blocks = inode->i_mapping->nrpages << (PAGE_CACHE_SHIFT - 9);
+  return 0;
+}
+
 #endif // __KERNEL__

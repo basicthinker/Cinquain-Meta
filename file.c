@@ -12,22 +12,31 @@
 
 #include "cinq_meta.h"
 
-int cinq_open(struct inode *inode, struct file *file) {
+int cinq_file_open(struct inode *inode, struct file *file) {
   return 0;
 }
 
-ssize_t cinq_read(struct file *filp, char *buf, size_t len, loff_t *ppos) {
+ssize_t cinq_file_read(struct file *filp, char *buf, size_t len, loff_t *ppos) {
   return 0;
 }
 
-ssize_t cinq_write(struct file *filp, const char *buf, size_t len,
+ssize_t cinq_file_write(struct file *filp, const char *buf, size_t len,
                    loff_t *ppos) {
   return 0;
 }
 
-int cinq_release_file(struct inode * inode, struct file * filp) {
+int cinq_file_release(struct inode * inode, struct file * filp) {
   return 0;
 }
+
+int cinq_dir_open(struct inode *inode, struct file *file) {
+  return 0;
+}
+
+int cinq_dir_release(struct inode * inode, struct file * filp) {
+  return 0;
+}
+
 
 /* Relationship between i_mode and the DT_xxx types */
 static inline unsigned char dt_type(struct inode *inode) {

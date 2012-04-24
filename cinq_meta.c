@@ -46,7 +46,8 @@ const struct inode_operations cinq_dir_inode_operations = {
 };
 
 const struct inode_operations cinq_file_inode_operations = {
-	.setattr	= cinq_setattr
+	.setattr	= cinq_setattr,
+  .getattr  = simple_getattr
 };
 
 const struct inode_operations cinq_symlink_inode_operations = {
@@ -56,14 +57,24 @@ const struct inode_operations cinq_symlink_inode_operations = {
 };
 
 const struct file_operations cinq_file_operations = {
-	.read     = cinq_read,
-	.write		= cinq_write,
-	.open     = cinq_open,
-	.release	= cinq_release_file
+	.read     = cinq_file_read,
+	.write		= cinq_file_write,
+	.open     = cinq_file_open,
+	.release	= cinq_file_release,
+  
+  .fsync    = noop_fsync,
+  .llseek   = generic_file_llseek
 };
 
+// Refers to fs/libfs.c. Also used by ramfs.
 const struct file_operations cinq_dir_operations = {
-  .readdir  = cinq_readdir
+  .open     = cinq_dir_open,
+  .release  = cinq_dir_release,
+  //  .llseek   = cinq_dir_llseek,
+  .readdir  = cinq_readdir,
+  
+  .read     = generic_read_dir,
+  .fsync    = noop_fsync
 };
 
 #ifdef __KERNEL__

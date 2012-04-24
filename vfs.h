@@ -244,7 +244,7 @@ struct super_block {
 	unsigned long		s_magic;
 	struct dentry		*s_root;
   //	struct rw_semaphore	s_umount;
-  //	struct mutex		s_lock;
+  //  struct mutex		s_lock;
 	int			s_count;
   atomic_t		s_active;
   //#ifdef CONFIG_SECURITY
@@ -312,8 +312,8 @@ struct inode {
   
 	spinlock_t		  i_lock;	/* i_blocks, i_bytes, maybe i_size */
 	unsigned int		i_flags;
-  // struct mutex		i_mutex;
-  
+  //  struct mutex		i_mutex;
+  mutex_t         i_mutex;
 	unsigned long		i_state;
 	unsigned long		dirtied_when;	/* jiffies of first dirtying */
   
@@ -589,8 +589,7 @@ struct file_operations {
 	// ssize_t (*splice_write)(struct pipe_inode_info *, struct file *, loff_t *, size_t, unsigned int);
 	// ssize_t (*splice_read)(struct file *, loff_t *, struct pipe_inode_info *, size_t, unsigned int);
 	// int (*setlease)(struct file *, long, struct file_lock **);
-	long (*fallocate)(struct file *file, int mode, loff_t offset,
-                    loff_t len);
+	long (*fallocate)(struct file *file, int mode, loff_t offset, loff_t len);
 };
 
 
@@ -621,6 +620,9 @@ extern struct dentry *mount_nodev(struct file_system_type *fs_type,
                                   int flags, void *data,
                                   int (*fill_super)(struct super_block *,
                                                     void *, int));
+extern loff_t generic_file_llseek(struct file *file,
+                                  loff_t offset, int origin);
+
 /**
  *	new_inode 	- obtain an inode
  *	@sb: superblock
@@ -799,6 +801,19 @@ static inline void setattr_copy(struct inode *inode, const struct iattr *attr)
     //			mode &= ~S_ISGID;
 		inode->i_mode = mode;
 	}
+}
+
+extern int simple_getattr(struct vfsmount *mnt, struct dentry *dentry,
+                          struct kstat *stat);
+
+static ssize_t generic_read_dir(struct file *filp, char *buf, size_t siz, loff_t *ppos)
+{
+  return -EISDIR;
+}
+
+static int noop_fsync(struct file *file, int datasync)
+{
+  return 0;
 }
 
 #else

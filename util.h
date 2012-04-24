@@ -88,6 +88,10 @@ typedef pthread_mutex_t spinlock_t;
 #define spin_trylock(lock_p) (pthread_mutex_trylock(lock_p))
 #define spin_unlock(lock_p) (pthread_mutex_unlock(lock_p))
 
+#define mutex_lock(lock_p) (pthread_mutex_lock(lock_p))
+#define mutex_unlock(lock_p) (pthread_mutex_unlock(lock_p))
+
+typedef pthread_mutex_t mutex_t;
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 

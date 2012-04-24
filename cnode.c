@@ -229,12 +229,13 @@ static struct inode *cinq_get_inode_(const struct inode *dir, int mode) {
         inode->i_op = &cinq_symlink_inode_operations;
         break;
       default:
-        DEBUG_("[Warn@cinq_new_inode] mode not matched under %lx.\n",
-               dir->i_ino);
+        DEBUG_("[Warn@cinq_new_inode] mode not matched under %s "
+               "with mode %o.\n", i_cnode(dir)->ci_name, mode);
         iput(inode);
         return NULL;
     }
   }
+  atomic_set(&inode->i_count, 1000000000); // prevents it from being evicted
   return inode;
 }
 
@@ -504,7 +505,7 @@ int cinq_symlink(struct inode *dir, struct dentry *dentry,
 }
 
 int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
-  
+  mode |= S_IFDIR;
   if (unlikely(inode_meta_root(dir))) { // not actually make dir
     char namestr[MAX_NAME_LEN + 1];
     strncpy(namestr, (char *)dentry->d_name.name, dentry->d_name.len + 1);
@@ -529,6 +530,8 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
   
     struct cinq_inode *dir_cnode = i_cnode(dir);
     if (!child_fs) { // makes new file system node
+      DEBUG_("cinq_mkdir: new fs %s under %s", fsnames[1],
+             parent_fs == META_FS ? "META_FS" : parent_fs->fs_name);
       child_fs = fsnode_new(parent_fs, fsnames[1]);
       struct inode *iroot = cinq_get_inode_(dir, mode);
       struct cinq_tag *tag = tag_new_(child_fs,
@@ -556,7 +559,7 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
    return -EINVAL;
   }
   // journal_inode(dir, UPDATE);
-  return cinq_mkinode_(dir, dentry, mode | S_IFDIR, NULL);
+  return cinq_mkinode_(dir, dentry, mode, NULL);
 }
 
 static inline struct inode *cinq_lookup_(const struct inode *dir,
@@ -808,7 +811,7 @@ int cinq_setattr(struct dentry *dentry, struct iattr *attr) {
 
 #ifdef __KERNEL__
 
-int __init init_cnode_cache(void) {
+int init_cnode_cache(void) {
   cinq_inode_cachep = kmem_cache_create(
       "cinq_inode_cache", sizeof(struct cinq_inode), 0,
       (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD), NULL);
@@ -817,7 +820,7 @@ int __init init_cnode_cache(void) {
   return 0;
 }
 
-void __exit destroy_cnode_cache(void) {
+void destroy_cnode_cache(void) {
   kmem_cache_destroy(cinq_inode_cachep);
 }
 

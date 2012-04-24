@@ -252,15 +252,22 @@ extern void cnode_evict_all(struct cinq_inode *root);
 
 
 /* file.c */
-extern int cinq_open(struct inode *inode, struct file *file);
+extern int cinq_file_open(struct inode *inode, struct file *file);
 
-extern ssize_t cinq_read(struct file *filp, char *buf, size_t len,
-                         loff_t *ppos);
-extern ssize_t cinq_write(struct file *filp, const char *buf, size_t len,
-                          loff_t *ppos);
-extern int cinq_release_file (struct inode * inode, struct file * filp);
+extern ssize_t cinq_file_read(struct file *filp, char *buf, size_t len,
+                              loff_t *ppos);
+extern ssize_t cinq_file_write(struct file *filp, const char *buf, size_t len,
+                               loff_t *ppos);
+extern int cinq_file_release(struct inode * inode, struct file * filp);
+
+extern int cinq_dir_open(struct inode *inode, struct file *file);
+
+extern int cinq_dir_release(struct inode * inode, struct file * filp);
 
 extern int cinq_readdir (struct file * filp, void * dirent, filldir_t filldir);
+
+extern int cinq_dir_release(struct inode * inode, struct file * filp);
+
 
 /* cinq_meta.c */
 extern struct file_system_type cinqfs;
