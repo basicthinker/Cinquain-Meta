@@ -595,6 +595,8 @@ struct file_operations {
 
 // stub.c
 /* Stub functions with user-space implementation */
+extern unsigned int full_name_hash(const unsigned char *name, unsigned int len);
+
 extern struct dentry *d_alloc(struct dentry * parent, const struct qstr *name);
 
 extern void d_instantiate(struct dentry *dentry, struct inode * inode);

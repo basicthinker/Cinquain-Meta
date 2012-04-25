@@ -429,7 +429,8 @@ static int cinq_mkinode_(struct inode *dir, struct dentry *dentry,
   child = cnode_find_child_(parent, name);
   if (child) {
     write_unlock(&parent->ci_children_lock);
-    
+    DEBUG_(">>> cinq_mkinode_: tag existing cnode %s by %s.\n",
+           child->ci_name, req_fs->fs_name);
     write_lock(&child->ci_tags_lock);
     tag = cnode_find_tag_(child, req_fs);
     if (unlikely(tag)) {
@@ -449,6 +450,8 @@ static int cinq_mkinode_(struct inode *dir, struct dentry *dentry,
     journal_inode(inode, CREATE);
     journal_cnode(child, UPDATE);
   } else {
+    DEBUG_(">>> cinq_mkinode_: create cnode under %s by %s.\n",
+           parent->ci_name, req_fs->fs_name);
     child = cnode_new_(name);
     if (unlikely(!child)) wr_release_return(&parent->ci_children_lock, -ENOSPC);
     tag = tag_new_(req_fs, mode >> CINQ_MODE_SHIFT, inode);
@@ -469,6 +472,7 @@ static int cinq_mkinode_(struct inode *dir, struct dentry *dentry,
   dir->i_mtime = dir->i_ctime = CURRENT_TIME;
   // journal_inode(dir, UPDATE);
   
+  DEBUG_("<<< cinq_mkinode_: increase local reference.\n");
   local_inc_ref(dir, dentry);
   return 0;
 }
@@ -510,32 +514,46 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
   mode |= S_IFDIR;
   if (unlikely(inode_meta_root(dir))) { // not actually make dir
     char namestr[MAX_NAME_LEN + 1];
+    char *delim_pos;
+    char *parent_name, *child_name;
     strncpy(namestr, (char *)dentry->d_name.name, dentry->d_name.len + 1);
-    char *fsnames[2] = { NULL, NULL };
-    struct cinq_fsnode *fsnodes[2] = { NULL, NULL };
-    char *cur = namestr;
-    char *token = strsep(&cur, FS_DELIM);
-    int i;
-    for (i = 0; token && i < 2; token = strsep(&cur, FS_DELIM), ++i) {
-      fsnames[i] = token;
-      fsnodes[i] = cfs_find_syn(&file_systems, token);
+    delim_pos = memchr(namestr, FS_DELIM, MAX_NAME_LEN + 1);
+    if (unlikely(!delim_pos)) {
+      DEBUG_("[Error@cinq_mkdir] vmfs names NOT properly specified: %s\n",
+             namestr);
+      return -EINVAL;
     }
-    struct cinq_fsnode *parent_fs = fsnodes[0];
-    struct cinq_fsnode *child_fs = fsnodes[1];
+    *delim_pos = '\0';
+    parent_name = namestr;
+    child_name = delim_pos + 1;
+    // FIX ME: deallocate old d_name.name
+    struct qstr *d_name = &dentry->d_name;
+    d_name->len = strlen(child_name);
+    d_name->name = malloc(d_name->len + 1);
+    strncpy((char *)d_name->name, child_name, d_name->len + 1);
+    d_name->hash = full_name_hash(d_name->name, d_name->len);
     
-    if (!fsnames[1] || (!parent_fs && strcmp(fsnames[0], "META_FS"))) {
+    struct cinq_fsnode *parent_fs = cfs_find_syn(&file_systems, parent_name);
+    struct cinq_fsnode *child_fs = cfs_find_syn(&file_systems, child_name);
+    
+    if (!parent_fs && strcmp(parent_name, "META_FS")) {
       DEBUG_("[Error@cinq_mkdir] parent fs NOT properly specified: %s\n",
-             fsnames[0]);
+             parent_name);
       return -EINVAL;
     }
     if (!parent_fs) parent_fs = META_FS;
   
     struct cinq_inode *dir_cnode = i_cnode(dir);
     if (!child_fs) { // makes new file system node
-      DEBUG_("cinq_mkdir: new fs %s under %s", fsnames[1],
+      DEBUG_(">>> cinq_mkdir: to create fs %s under %s.\n", child_name,
              parent_fs == META_FS ? "META_FS" : parent_fs->fs_name);
-      child_fs = fsnode_new(parent_fs, fsnames[1]);
+      child_fs = fsnode_new(parent_fs, child_name);
       struct inode *iroot = cinq_get_inode_(dir, mode);
+      if (unlikely(!iroot)) {
+        DEBUG_("[Error@cinq_mkdir] failed to allocate root inode for fs %s.\n",
+               child_fs->fs_name);
+        return -ENOSPC;
+      }
       struct cinq_tag *tag = tag_new_(child_fs,
                                       mode >> CINQ_MODE_SHIFT, iroot);
       cnode_add_tag_syn(dir_cnode, tag);
@@ -545,10 +563,14 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
       dentry->d_fsdata = child_fs;
       dir->i_mtime = dir->i_ctime = CURRENT_TIME;
       
+      DEBUG_("<<< cinq_mkdir: created vmfs with root dentry %s, inode at %p.\n",
+             dentry->d_name.name, dentry->d_inode);
       journal_inode(iroot, CREATE);
       journal_cnode(dir_cnode, UPDATE);
       // journal_inode(dir, UPDATE);
     } else { // make inheritance
+      DEBUG_(">>> cinq_mkdir: move fs %s to %s.\n", child_fs->fs_name,
+             parent_fs == META_FS ? "META_FS" : parent_fs->fs_name);
       fsnode_move(child_fs, parent_fs);
     }
     return 0;
@@ -561,6 +583,9 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
    return -EINVAL;
   }
   // journal_inode(dir, UPDATE);
+  DEBUG_("<<< cinq_mkdir: new dir %s under %s by %s.\n",
+         dentry->d_name.name, i_cnode(dir)->ci_name,
+         ((struct cinq_fsnode *)dentry->d_fsdata)->fs_name);
   return cinq_mkinode_(dir, dentry, mode, NULL);
 }
 
@@ -571,8 +596,8 @@ static inline struct inode *cinq_lookup_(const struct inode *dir,
 
   struct cinq_inode *child = cnode_find_child_syn(parent, name);
   if (!child) {
-    DEBUG_("[Info@cinq_lookup_] dir or file is NOT found: %s@%lx\n",
-           name, dir->i_ino);
+    DEBUG_("[Info@cinq_lookup_] dir or file is NOT found: %s@%s\n",
+           name, i_cnode(dir)->ci_name);
     return NULL;
   }
   
@@ -592,17 +617,23 @@ struct dentry *cinq_lookup(struct inode *dir, struct dentry *dentry,
   
   struct inode *inode;
   if (inode_meta_root(dir)) {
+    DEBUG_(">>> cinq_lookup: to look up vmfs %s.\n", name);
     struct cinq_fsnode *fs = cfs_find_syn(&file_systems, name);
     if (!fs) return NULL;
     inode = fs->fs_root->d_inode;
     dentry->d_fsdata = fs;
   } else {
+    DEBUG_(">>> cinq_lookup: to look up %s under %s.\n",
+           name, i_cnode(dir)->ci_name);
     inode = cinq_lookup_(dir, name);
     // pass the request ID on
     dentry->d_fsdata = nameidata ?
         nameidata->path.dentry->d_fsdata : dentry->d_parent->d_fsdata;
   }
   if (!inode) {
+    DEBUG_("<<< cinq_lookup: failed to locate %s under %s by vmfs %s.\n",
+           dentry->d_name.name, i_cnode(dir)->ci_name,
+           ((struct cinq_fsnode *)dentry->d_fsdata)->fs_name);
     return ERR_PTR(-EIO);
   }
   return d_splice_alias(inode, dentry);

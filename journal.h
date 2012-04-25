@@ -44,13 +44,17 @@ extern struct kmem_cache *cinq_jentry_cachep;
 
 #endif // __KERNEL__
 
-static inline struct cinq_jentry *journal_entry_new(void *key, void *data,
-                                                      enum journal_action action) {
+static inline struct cinq_jentry *jentry_new(void *key, void *data,
+                                             enum journal_action action) {
   struct cinq_jentry *new_entry = jentry_malloc_();
   new_entry->key = key;
   new_entry->data = data;
   new_entry->action = action;
   return new_entry;
+}
+
+static inline void jentry_free(struct cinq_jentry *jentry) {
+  jentry_free_(jentry);
 }
 
 struct cinq_journal {

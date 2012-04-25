@@ -76,7 +76,7 @@ void cinq_kill_sb(struct super_block *sb) {
     fsnode_evict_all(META_FS);
     d_genocide(sb->s_root);
     cnode_evict_all(i_cnode(sb->s_root->d_inode));
-    dput(sb->s_root); // cancel the extra reference and delete
+    // dput(sb->s_root); // cancel the extra reference and delete // FIX ME
   }
   DEBUG_ON_(!sb->s_root, "[Warn@cinq_kill_sb]: invoked on null dentry.\n");
 }
@@ -132,6 +132,7 @@ THREAD_FUNC_(journal_writeback)(void *data) {
                  " %d.\n", entry->action);
           break;
       }
+      jentry_free(entry);
     }
     
     set_current_state(TASK_INTERRUPTIBLE);
@@ -141,17 +142,17 @@ THREAD_FUNC_(journal_writeback)(void *data) {
 }
 
 void journal_fsnode(struct cinq_fsnode *fsnode, enum journal_action action) {
-  struct cinq_jentry *entry = journal_entry_new(&fsnode->fs_id,
+  struct cinq_jentry *entry = jentry_new(&fsnode->fs_id,
                                                   fsnode, action);
   journal_add_syn(&cinq_journal, entry);
 }
 
 void journal_cnode(struct cinq_inode *cnode, enum journal_action action) {
-  struct cinq_jentry *entry = journal_entry_new(&cnode->ci_id, cnode, action);
+  struct cinq_jentry *entry = jentry_new(&cnode->ci_id, cnode, action);
   journal_add_syn(&cinq_journal, entry);
 }
 
 void journal_inode(struct inode *inode, enum journal_action action) {
-  struct cinq_jentry *entry = journal_entry_new(&inode->i_ino, inode, action);
+  struct cinq_jentry *entry = jentry_new(&inode->i_ino, inode, action);
   journal_add_syn(&cinq_journal, entry);
 }

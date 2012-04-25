@@ -22,6 +22,17 @@
 
 // ALL comments and implementation are borrowed from linux source.
 
+/* Compute the hash for a name string. */
+// Used for user-space dcache
+unsigned int full_name_hash(const unsigned char *name, unsigned int len)
+{
+//  unsigned long hash = init_name_hash();
+//  while (len--)
+//    hash = partial_name_hash(*name++, hash);
+//  return end_name_hash(hash);
+  return 0;
+}
+
 /**
  * d_alloc	-	allocate a dcache entry
  * @parent: parent of entry to allocate
