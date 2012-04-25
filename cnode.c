@@ -46,6 +46,7 @@ static inline struct cinq_tag *tag_new_with_(const struct cinq_fsnode *fs,
   tag->t_mode = mode;
   tag->t_host = NULL;
   atomic_set(&tag->t_nchild, 0);
+  atomic_set(&tag->t_count, 0);
   tag->t_symname = NULL;
   return tag;
 }
@@ -130,6 +131,7 @@ static struct cinq_inode *cnode_new_(char *name) {
   // Initializes cnode
   cnode->ci_id = (unsigned long)cnode;
   strcpy(cnode->ci_name, name);
+  atomic_set(&cnode->ci_count, 0);
   cnode->ci_tags = NULL;
   cnode->ci_children = NULL;
   rwlock_init(&cnode->ci_tags_lock);

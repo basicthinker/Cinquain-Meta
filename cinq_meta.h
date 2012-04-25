@@ -121,6 +121,7 @@ struct cinq_tag {
   struct inode *t_inode; // whose i_no points to this tag
 
   atomic_t t_nchild;
+  atomic_t t_count;
   enum cinq_visibility t_mode;
   unsigned char t_file_handle[FILE_HASH_WIDTH];
   char *t_symname;
@@ -162,6 +163,7 @@ struct cinq_inode {
   struct cinq_inode *ci_children; // hash table of children
   UT_hash_handle ci_child;
   rwlock_t ci_children_lock;
+  atomic_t ci_count;
 };
 
 // No inode cache is necessary since cinq_inodes are in memory.

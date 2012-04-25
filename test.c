@@ -279,7 +279,7 @@ struct some_entry {
 
 /* Example for using filldir */
 static int example_filldir(void *dirent, const char *name, int name_len,
-                           loff_t pos, u64 ino, unsigned dt_type) {
+                      loff_t pos, u64 ino, unsigned dt_type) {
   // User-defined way to use dirent
   struct list_head *list = (struct list_head *)dirent;
   // The way to retrieve inode
@@ -304,17 +304,19 @@ static int example_filldir(void *dirent, const char *name, int name_len,
 
 static void do_ls_(struct dentry *dent) {
   
-  /* Example for invoking cinq_readdir() */
+  /* Example for invoking cinq_readdir() once for all */
   LIST_HEAD(entries);
   struct some_entry *cur, *tmp;
   
   struct file *filp = dentry_open(dent, NULL, 0, NULL);
+  filp->f_op->open(NULL, filp);
   filp->f_op->readdir(filp, &entries, example_filldir);
   list_for_each_entry_safe_reverse(cur, tmp, &entries, member) {
     fprintf(stdout, "%s\t%d\n", cur->name, cur->size);
     list_del(&cur->member);
     free(cur);
   }
+  filp->f_op->release(NULL, filp);
   put_filp(filp); // remember to free
 }
 
