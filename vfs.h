@@ -820,6 +820,16 @@ static int noop_fsync(struct file *file, int datasync)
   return 0;
 }
 
+static inline ino_t parent_ino(struct dentry *dentry)
+{
+  ino_t res;
+
+  spin_lock(&dentry->d_lock);
+  res = dentry->d_parent->d_inode->i_ino;
+  spin_unlock(&dentry->d_lock);
+  return res;
+}
+
 #else
 
 #include <linux/fs.h>

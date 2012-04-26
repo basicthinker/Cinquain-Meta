@@ -58,10 +58,10 @@ int cinq_dir_release(struct inode * inode, struct file * filp) {
   }
   if (unlikely(inode_meta_root(dir))) {
     struct cinq_tag *tag = filp->private_data;
-    atomic_dec(&tag->t_count);
+    if (unlikely(tag)) atomic_dec(&tag->t_count);
   } else {
     struct cinq_inode *cnode = filp->private_data;
-    atomic_dec(&cnode->ci_count);
+    if (unlikely(cnode)) atomic_dec(&cnode->ci_count);
   }
   return 0;
 }
@@ -72,30 +72,21 @@ static inline unsigned char dt_type(struct inode *inode) {
   return (inode->i_mode >> 12) & 15;
 }
 
+#define move_cursor(cur, count, hh) ( \
+  atomic_dec(&cursor->count), \
+  cursor = cursor->hh.next, \
+  cursor ? atomic_inc(&cursor->count) : NULL, \
+  filp->private_data = cursor \
+)
+
 int cinq_readdir(struct file *filp, void *dirent, filldir_t filldir) {
 	struct dentry *dentry = filp->f_path.dentry;
   struct inode *inode = dentry->d_inode;
-  struct cinq_inode *dir_cnode = i_cnode(inode);
+  struct cinq_inode *cnode = i_cnode(inode);
+  char *name;
   
   if (unlikely(inode_meta_root(inode))) {
-    struct cinq_tag *tag;
-    read_lock(&dir_cnode->ci_tags_lock);
-    for (tag = filp->private_data; tag != NULL;
-         atomic_dec(&tag->t_count), tag = tag->hh.next) {
-      atomic_inc(&tag->t_count);
-      if (tag->t_fs == META_FS) continue;
-      if (filldir(dirent, tag->t_fs->fs_name, strlen(tag->t_fs->fs_name),
-                  filp->f_pos, tag->t_inode->i_ino, DT_DIR) < 0) {
-        filp->private_data = tag;
-        return 0;
-      }
-      filp->f_pos++;
-    }
-    read_unlock(&dir_cnode->ci_tags_lock);
-  } else {
-    ino_t ino;
-    struct cinq_inode *cnode;
-    struct inode *cur;
+    struct cinq_tag *cursor = filp->private_data;
 
     switch (filp->f_pos) {
       case 0:
@@ -104,26 +95,62 @@ int cinq_readdir(struct file *filp, void *dirent, filldir_t filldir) {
         filp->f_pos++;
         /* fallthrough */
       case 1:
-        ino = cnode_lookup_inode(dir_cnode->ci_parent, dentry->d_fsdata)->i_ino;
+        if (filldir(dirent, "..", 2, filp->f_pos,
+                    parent_ino(dentry), DT_DIR) < 0)
+          break;
+        filp->f_pos++;
+        /* fallthrough */
+      default:
+        read_lock(&cnode->ci_tags_lock);
+        if (filp->f_pos == 2 && cursor && cursor != cnode->ci_tags) {
+          atomic_dec(&cursor->t_count);
+          cursor = cnode->ci_tags;
+          atomic_inc(&cursor->t_count);
+          filp->private_data = cursor;
+        }
+        for (; cursor != NULL; move_cursor(cursor, t_count, hh)) {
+          if (cursor->t_fs == META_FS) continue;
+          if (filldir(dirent, (name = cursor->t_fs->fs_name), strlen(name),
+                      filp->f_pos, cursor->t_inode->i_ino, DT_DIR) < 0)
+            return 0;
+          filp->f_pos++;
+        }
+        read_unlock(&cnode->ci_tags_lock);
+    }
+  } else {
+    struct cinq_inode *cursor = filp->private_data;
+    struct inode *target;
+    ino_t ino;
+
+    switch (filp->f_pos) {
+      case 0:
+        if (filldir(dirent, ".", 1, filp->f_pos, inode->i_ino, DT_DIR) < 0)
+          break;
+        filp->f_pos++;
+        /* fallthrough */
+      case 1:
+        ino = cnode_lookup_inode(cnode->ci_parent, dentry->d_fsdata)->i_ino;
         if (filldir(dirent, "..", 2, filp->f_pos, ino, DT_DIR) < 0)
           break;
         filp->f_pos++;
         /* fallthrough */
       default:
-        read_lock(&dir_cnode->ci_children_lock);
-        for (cnode = dir_cnode->ci_children; cnode != NULL;
-             atomic_dec(&cnode->ci_count), cnode = cnode->ci_child.next) {
-          cur = cnode_lookup_inode(cnode, dentry->d_fsdata);
-          atomic_inc(&cnode->ci_count);
-          if (!cur) continue;
-          if (filldir(dirent, cnode->ci_name, strlen(cnode->ci_name),
-                      filp->f_pos, cur->i_ino, dt_type(cur)) < 0) {
-            filp->private_data = cnode;
+        read_lock(&cnode->ci_children_lock);
+        if (filp->f_pos == 2 && cursor && cursor != cnode->ci_children) {
+          atomic_dec(&cursor->ci_count);
+          cursor = cnode->ci_children;
+          atomic_inc(&cursor->ci_count);
+          filp->private_data = cursor;
+        }
+        for (; cursor != NULL; move_cursor(cursor, ci_count, ci_child)) {
+          target = cnode_lookup_inode(cursor, dentry->d_fsdata);
+          if (!target) continue;
+          if (filldir(dirent, (name = cursor->ci_name), strlen(name),
+                      filp->f_pos, target->i_ino, dt_type(target)) < 0)
             return 0;
-          }
           filp->f_pos++;
         }
-        read_unlock(&dir_cnode->ci_children_lock);
+        read_unlock(&cnode->ci_children_lock);
     }
   }
   return 0;

@@ -431,7 +431,7 @@ static int cinq_mkinode_(struct inode *dir, struct dentry *dentry,
   child = cnode_find_child_(parent, name);
   if (child) {
     write_unlock(&parent->ci_children_lock);
-    DEBUG_(">>> cinq_mkinode_: tag existing cnode %s by %s.\n",
+    DEBUG_(">>> cinq_mkinode_(1): tag existing cnode %s by %s.\n",
            child->ci_name, req_fs->fs_name);
     write_lock(&child->ci_tags_lock);
     tag = cnode_find_tag_(child, req_fs);
@@ -452,7 +452,7 @@ static int cinq_mkinode_(struct inode *dir, struct dentry *dentry,
     journal_inode(inode, CREATE);
     journal_cnode(child, UPDATE);
   } else {
-    DEBUG_(">>> cinq_mkinode_: create cnode under %s by %s.\n",
+    DEBUG_(">>> cinq_mkinode_(2): create cnode under %s by %s.\n",
            parent->ci_name, req_fs->fs_name);
     child = cnode_new_(name);
     if (unlikely(!child)) wr_release_return(&parent->ci_children_lock, -ENOSPC);
@@ -474,8 +474,8 @@ static int cinq_mkinode_(struct inode *dir, struct dentry *dentry,
   dir->i_mtime = dir->i_ctime = CURRENT_TIME;
   // journal_inode(dir, UPDATE);
   
-  DEBUG_("<<< cinq_mkinode_: increase local reference.\n");
   local_inc_ref(dir, dentry);
+  DEBUG_("<<< cinq_mkinode_: increased local reference.\n");
   return 0;
 }
 
