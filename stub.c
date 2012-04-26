@@ -321,6 +321,27 @@ relock:
  * Real recursion would eat up our stack space.
  */
 
+/**
+ *      dget, dget_locked       -       get a reference to a dentry
+ *      @dentry: dentry to get a reference to
+ *
+ *      Given a dentry or %NULL pointer increment the reference count
+ *      if appropriate and return the dentry. A dentry will not be 
+ *      destroyed when it has references. dget() should never be
+ *      called for dentries with zero reference counter. For these cases
+ *      (preferably none, functions in dcache.c are sufficient for normal
+ *      needs and they take necessary precautions) you should hold dcache_lock
+ *      and call dget_locked() instead of dget().
+ */  
+struct dentry *dget(struct dentry *dentry) {
+  if (dentry) {
+    spin_lock(&dentry->d_lock);
+    dentry->d_count++;
+    spin_unlock(&dentry->d_lock);
+  }
+  return dentry;
+}
+
 /*
  * dput - release a dentry
  * @dentry: dentry to release 

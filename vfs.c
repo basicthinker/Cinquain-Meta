@@ -123,11 +123,7 @@ struct dentry *mount_nodev(struct file_system_type *fs_type,
 		return ERR_PTR(error);
 	}
 	s->s_flags |= MS_ACTIVE;
-	// return dget(s->s_root); // expanded
-  spin_lock(&s->s_root->d_lock);
-  s->s_root->d_count++; // to prevent being destroyed
-  spin_unlock(&s->s_root->d_lock);
-  return s->s_root;
+	return dget(s->s_root);
 }
 
 

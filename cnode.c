@@ -189,6 +189,8 @@ struct inode *cnode_lookup_inode(struct cinq_inode *cnode, struct cinq_fsnode *f
     }
   }
   read_unlock(&cnode->ci_tags_lock);
+  DEBUG_("cnode_lookup_inode: failed to find tag by %s on %s.\n",
+         fs->fs_name, cnode->ci_name);
   return NULL;
 }
 
@@ -519,7 +521,7 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
     strncpy(namestr, (char *)dentry->d_name.name, dentry->d_name.len + 1);
     delim_pos = memchr(namestr, FS_DELIM, MAX_NAME_LEN + 1);
     if (unlikely(!delim_pos)) {
-      DEBUG_("[Error@cinq_mkdir] vmfs names NOT properly specified: %s\n",
+      DEBUG_("[Error@cinq_mkdir] fs names NOT properly specified: %s\n",
              namestr);
       return -EINVAL;
     }
@@ -536,7 +538,7 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
     struct cinq_fsnode *parent_fs = cfs_find_syn(&file_systems, parent_name);
     struct cinq_fsnode *child_fs = cfs_find_syn(&file_systems, child_name);
     
-    if (!parent_fs && strcmp(parent_name, "META_FS")) {
+    if (unlikely(!parent_fs && strcmp(parent_name, "META_FS"))) {
       DEBUG_("[Error@cinq_mkdir] parent fs NOT properly specified: %s\n",
              parent_name);
       return -EINVAL;
@@ -556,14 +558,20 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
       }
       struct cinq_tag *tag = tag_new_(child_fs,
                                       mode >> CINQ_MODE_SHIFT, iroot);
+      if (unlikely(!tag)) {
+        DEBUG_("[Error@cinq_mkdir] failed to allocate root tag for fs %s.\n",
+               child_fs->fs_name);
+        return -ENOSPC;
+      }
       cnode_add_tag_syn(dir_cnode, tag);
       
       d_instantiate(dentry, iroot);
+      dget(dentry); // prevents it from being freed
       child_fs->fs_root = dentry;
       dentry->d_fsdata = child_fs;
       dir->i_mtime = dir->i_ctime = CURRENT_TIME;
       
-      DEBUG_("<<< cinq_mkdir: created vmfs with root dentry %s, inode at %p.\n",
+      DEBUG_("<<< cinq_mkdir: created root dentry name %s, inode at %p.\n",
              dentry->d_name.name, dentry->d_inode);
       journal_inode(iroot, CREATE);
       journal_cnode(dir_cnode, UPDATE);
@@ -571,7 +579,9 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
     } else { // make inheritance
       DEBUG_(">>> cinq_mkdir: move fs %s to %s.\n", child_fs->fs_name,
              parent_fs == META_FS ? "META_FS" : parent_fs->fs_name);
-      fsnode_move(child_fs, parent_fs);
+      if (child_fs->fs_parent != parent_fs) {
+        fsnode_move(child_fs, parent_fs);
+      }
     }
     return 0;
   }
@@ -595,13 +605,17 @@ static inline struct inode *cinq_lookup_(const struct inode *dir,
   struct cinq_fsnode *fs;
 
   struct cinq_inode *child = cnode_find_child_syn(parent, name);
-  if (!child) {
-    DEBUG_("[Info@cinq_lookup_] dir or file is NOT found: %s@%s\n",
-           name, i_cnode(dir)->ci_name);
+  if (unlikely(!child)) {
+    DEBUG_("[Info@cinq_lookup_] cnode is NOT found: %s under %s\n",
+           name, parent->ci_name);
     return NULL;
   }
   
   fs = i_fs(dir);
+  if (unlikely(!fs)) {
+    DEBUG_("[Error@cinq_lookup_] fs is NOT found for inode at %p.\n", dir);
+    return NULL;
+  }
   return cnode_lookup_inode(child, fs);
 
   // Since we directly read meta data in memory, there is no iget-like function.
@@ -617,13 +631,13 @@ struct dentry *cinq_lookup(struct inode *dir, struct dentry *dentry,
   
   struct inode *inode;
   if (inode_meta_root(dir)) {
-    DEBUG_(">>> cinq_lookup: to look up vmfs %s.\n", name);
+    DEBUG_(">>> cinq_lookup(1): to look up fs %s.\n", name);
     struct cinq_fsnode *fs = cfs_find_syn(&file_systems, name);
     if (!fs) return NULL;
     inode = fs->fs_root->d_inode;
     dentry->d_fsdata = fs;
   } else {
-    DEBUG_(">>> cinq_lookup: to look up %s under %s.\n",
+    DEBUG_(">>> cinq_lookup(2): to look up %s under %s.\n",
            name, i_cnode(dir)->ci_name);
     inode = cinq_lookup_(dir, name);
     // pass the request ID on
@@ -631,10 +645,10 @@ struct dentry *cinq_lookup(struct inode *dir, struct dentry *dentry,
         nameidata->path.dentry->d_fsdata : dentry->d_parent->d_fsdata;
   }
   if (!inode) {
-    DEBUG_("<<< cinq_lookup: failed to locate %s under %s by vmfs %s.\n",
+    DEBUG_("<<< cinq_lookup: FAILED to locate %s under %s by fs %s.\n",
            dentry->d_name.name, i_cnode(dir)->ci_name,
            ((struct cinq_fsnode *)dentry->d_fsdata)->fs_name);
-    return ERR_PTR(-EIO);
+    return NULL;
   }
   return d_splice_alias(inode, dentry);
 }

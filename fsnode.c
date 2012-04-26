@@ -113,9 +113,12 @@ void fsnode_move(struct cinq_fsnode *child,
            child->fs_name, new_parent->fs_name);
     return;
   }
-  write_lock(&child->fs_parent->fs_children_lock);
-  HASH_DELETE(fs_child, child->fs_parent->fs_children, child);
-  write_unlock(&child->fs_parent->fs_children_lock);
+  
+  if (child->fs_parent != META_FS) {
+    write_lock(&child->fs_parent->fs_children_lock);
+    HASH_DELETE(fs_child, child->fs_parent->fs_children, child);
+    write_unlock(&child->fs_parent->fs_children_lock);
+  }
 
   child->fs_parent = new_parent; // supposed to be atomic
   
