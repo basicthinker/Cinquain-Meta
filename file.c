@@ -36,15 +36,18 @@ int cinq_dir_open(struct inode *inode, struct file *filp) {
     return -EINVAL;
   }
   struct cinq_inode *cnode = i_cnode(dir);
+  
   if (unlikely(inode_meta_root(dir))) {
+    struct cinq_tag *cur;
     read_lock(&cnode->ci_tags_lock);
-    filp->private_data = cnode->ci_tags;
-    atomic_inc(&cnode->ci_tags->t_count);
+    cur = filp->private_data = cnode->ci_tags;
+    if (cur) atomic_inc(&cur->t_count);
     read_unlock(&cnode->ci_tags_lock);
   } else {
+    struct cinq_inode *cur;
     read_lock(&cnode->ci_children_lock);
-    filp->private_data = cnode->ci_children;
-    atomic_inc(&cnode->ci_children->ci_count);
+    cur = filp->private_data = cnode->ci_children;
+    if (cur) atomic_inc(&cur->ci_count);
     read_unlock(&cnode->ci_children_lock);
   }
   return 0;
@@ -73,10 +76,10 @@ static inline unsigned char dt_type(struct inode *inode) {
 }
 
 #define move_cursor(cur, count, hh) ( \
-  atomic_dec(&cursor->count), \
-  cursor = cursor->hh.next, \
-  cursor ? atomic_inc(&cursor->count) : NULL, \
-  filp->private_data = cursor \
+  atomic_dec(&cur->count), \
+  cur = cur->hh.next, \
+  cur ? atomic_inc(&cur->count) : NULL, \
+  filp->private_data = cur \
 )
 
 int cinq_readdir(struct file *filp, void *dirent, filldir_t filldir) {
@@ -102,10 +105,10 @@ int cinq_readdir(struct file *filp, void *dirent, filldir_t filldir) {
         /* fallthrough */
       default:
         read_lock(&cnode->ci_tags_lock);
-        if (filp->f_pos == 2 && cursor && cursor != cnode->ci_tags) {
-          atomic_dec(&cursor->t_count);
+        if (filp->f_pos == 2 && cursor != cnode->ci_tags) {
+          if (cursor) atomic_dec(&cursor->t_count);
           cursor = cnode->ci_tags;
-          atomic_inc(&cursor->t_count);
+          if (cursor) atomic_inc(&cursor->t_count);
           filp->private_data = cursor;
         }
         for (; cursor != NULL; move_cursor(cursor, t_count, hh)) {
@@ -136,10 +139,10 @@ int cinq_readdir(struct file *filp, void *dirent, filldir_t filldir) {
         /* fallthrough */
       default:
         read_lock(&cnode->ci_children_lock);
-        if (filp->f_pos == 2 && cursor && cursor != cnode->ci_children) {
-          atomic_dec(&cursor->ci_count);
+        if (filp->f_pos == 2 && cursor != cnode->ci_children) {
+          if (cursor) atomic_dec(&cursor->ci_count);
           cursor = cnode->ci_children;
-          atomic_inc(&cursor->ci_count);
+          if (cursor) atomic_inc(&cursor->ci_count);
           filp->private_data = cursor;
         }
         for (; cursor != NULL; move_cursor(cursor, ci_count, ci_child)) {
