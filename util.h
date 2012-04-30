@@ -150,6 +150,8 @@ static inline long PTR_ERR(const void *ptr) { // include/linux/err.h
     ((struct cinq_tag *)vmalloc(sizeof(struct cinq_tag)))
 #define tag_free_(p) (vfree(p))
 
+#define bufcpy(des, src, len) __copy_to_user(des, src, len)
+
 #define sleep(n) ssleep(n)
 
 #else
@@ -167,6 +169,8 @@ static inline long PTR_ERR(const void *ptr) { // include/linux/err.h
 #define tag_malloc_() \
     ((struct cinq_tag *)malloc(sizeof(struct cinq_tag)))
 #define tag_free_(p) (free(p))
+
+#define bufcpy(des, src, len) memcpy(des, src, len)
 
 #define CURRENT_TIME ((struct timespec) { time(NULL), 0 })
 

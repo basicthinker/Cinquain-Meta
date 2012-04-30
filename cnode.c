@@ -853,6 +853,9 @@ int cinq_setattr(struct dentry *dentry, struct iattr *attr) {
   }
   setattr_copy(inode, attr);
   
+  DEBUG_("cinq_setattr: set %s(%s) size %lld.\n",
+         i_cnode(inode)->ci_name,
+         i_tag(inode)->t_fs->fs_name, inode->i_size);
   return error;
 }
 
