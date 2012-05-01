@@ -210,7 +210,8 @@ static void cnode_evict(struct cinq_inode *cnode) {
 
 // @dir: can be containing directory when adding new inode in it,
 //       or contained directory when its parents are tagged.
-static struct inode *cinq_get_inode_(const struct inode *dir, int mode) {
+static struct inode *cinq_get_inode_(const struct inode *dir, int mode,
+                                     dev_t dev) {
   struct super_block *sb = dir->i_sb;
   struct inode * inode = new_inode(sb);
   if (inode) {
@@ -219,6 +220,9 @@ static struct inode *cinq_get_inode_(const struct inode *dir, int mode) {
     inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
     // insert_inode_hash(inode);
     switch (mode & S_IFMT) {
+      default:
+        init_special_inode(inode, mode, dev);
+        break;
       case S_IFREG:
         inode->i_op = &cinq_file_inode_operations;
         inode->i_fop = &cinq_file_operations;
@@ -232,11 +236,6 @@ static struct inode *cinq_get_inode_(const struct inode *dir, int mode) {
       case S_IFLNK:
         inode->i_op = &cinq_symlink_inode_operations;
         break;
-      default:
-        DEBUG_("[Warn@cinq_new_inode] mode not matched under %s "
-               "with mode %o.\n", i_cnode(dir)->ci_name, mode);
-        iput(inode);
-        return NULL;
     }
   }
   atomic_set(&inode->i_count, 1000000000); // prevents it from being evicted
@@ -266,7 +265,7 @@ static void cnode_tag_ancestors_(const struct dentry *dentry) {
     }
     
     int mode = (child->i_mode & ~S_IFMT) | S_IFDIR;
-    struct inode *parent = cinq_get_inode_(child, mode);
+    struct inode *parent = cinq_get_inode_(child, mode, 0);
     if (!parent) {
       DEBUG_("[Error@cnode_tag_ancestors_] inode allocation failed "
              "when tagging ancestors of %s.\n", i_cnode(child)->ci_name);
@@ -406,7 +405,7 @@ struct inode *cnode_make_tree(struct super_block *sb) {
 }
 
 static int cinq_mkinode_(struct inode *dir, struct dentry *dentry,
-                         int mode, struct inode *inode) {
+                         int mode, struct inode *inode, dev_t dev) {
   struct cinq_inode *parent = i_cnode(dir);
   struct cinq_inode *child;
   struct cinq_tag *tag;
@@ -419,7 +418,7 @@ static int cinq_mkinode_(struct inode *dir, struct dentry *dentry,
   }
   
   if (!inode) {
-    inode = cinq_get_inode_(dir, mode);
+    inode = cinq_get_inode_(dir, mode, dev);
   } else {
     ihold(inode);
   }
@@ -483,7 +482,7 @@ static int cinq_mkinode_(struct inode *dir, struct dentry *dentry,
   return 0;
 }
 
-// Refer to definition comments in cinq-meta.h
+// Refer to definition comments in cinq_meta.h
 int cinq_create(struct inode *dir, struct dentry *dentry,
                 int mode, struct nameidata *nameidata) {
   dentry->d_fsdata = nameidata ?
@@ -493,7 +492,18 @@ int cinq_create(struct inode *dir, struct dentry *dentry,
     DEBUG_("[Error@cinq_create] no fsnode is specified.\n");
     return -EINVAL;
   }
-  return cinq_mkinode_(dir, dentry, mode | S_IFREG, NULL);
+  return cinq_mkinode_(dir, dentry, mode | S_IFREG, NULL, 0);
+}
+
+int cinq_mknod(struct inode *dir, struct dentry *dentry, int mode, dev_t dev) {
+  dentry->d_fsdata = dentry->d_parent->d_fsdata;
+  if (unlikely(!dentry->d_fsdata)) {
+    DEBUG_("[Error@cinq_mknod] null fsnode for %s under dir %lx.\n",
+           dentry->d_name.name, dir->i_ino);
+    return -EINVAL;
+  }
+  journal_inode(dir, CREATE);
+  return cinq_mkinode_(dir, dentry, mode, NULL, dev);
 }
 
 int cinq_symlink(struct inode *dir, struct dentry *dentry,
@@ -504,7 +514,7 @@ int cinq_symlink(struct inode *dir, struct dentry *dentry,
     return -EINVAL;
   }
   
-  int err = cinq_mkinode_(dir, dentry, S_IFLNK | S_IRWXUGO, NULL);
+  int err = cinq_mkinode_(dir, dentry, S_IFLNK | S_IRWXUGO, NULL, 0);
   if (!err) {
     struct inode *inode = dentry->d_inode;
     struct cinq_tag *tag = i_tag(inode);
@@ -555,7 +565,7 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
       DEBUG_(">>> cinq_mkdir: to create fs %s under %s.\n", child_name,
              parent_fs == META_FS ? "META_FS" : parent_fs->fs_name);
       child_fs = fsnode_new(parent_fs, child_name);
-      struct inode *iroot = cinq_get_inode_(dir, mode);
+      struct inode *iroot = cinq_get_inode_(dir, mode, 0);
       if (unlikely(!iroot)) {
         DEBUG_("[Error@cinq_mkdir] failed to allocate root inode for fs %s.\n",
                child_fs->fs_name);
@@ -601,7 +611,7 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
   DEBUG_("<<< cinq_mkdir: new dir %s under %s by %s.\n",
          dentry->d_name.name, i_cnode(dir)->ci_name,
          ((struct cinq_fsnode *)dentry->d_fsdata)->fs_name);
-  return cinq_mkinode_(dir, dentry, mode, NULL);
+  return cinq_mkinode_(dir, dentry, mode, NULL, 0);
 }
 
 static inline struct inode *cinq_lookup_(const struct inode *dir,

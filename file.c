@@ -78,7 +78,7 @@ ssize_t cinq_file_write(struct file *filp, const char *buf, size_t len,
   struct inode *inode = filp->f_path.dentry->d_inode;
   char *fname = (char *)filp->f_dentry->d_name.name;
   
-  DEBUG_("cinq_file_write: write to '%s' with len = %ld\n", fname, len);
+  DEBUG_("cinq_file_write: write to file '%s' with len = %ld\n", fname, len);
   
   fp.uid = 0;
   cfp_set_value(&fp, filp);

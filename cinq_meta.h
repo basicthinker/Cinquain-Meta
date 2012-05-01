@@ -225,6 +225,8 @@ extern struct dentry *cinq_lookup(struct inode *dir, struct dentry *dentry,
 //    this parameter can be set null.
 extern int cinq_create(struct inode *dir, struct dentry *dentry,
                        int mode, struct nameidata *nameidata);
+extern int cinq_mknod(struct inode *dir, struct dentry *dentry, int mode,
+                      dev_t dev);
 extern int cinq_link(struct dentry *old_dentry, struct inode *dir,
                      struct dentry *dentry);
 extern int cinq_unlink(struct inode *dir, struct dentry *dentry);

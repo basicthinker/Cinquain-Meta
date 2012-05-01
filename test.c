@@ -595,7 +595,7 @@ static void test_rw(struct dentry *droot) {
     DEBUG_("[Error@test_rw] cannot find %s of %s.\n", dir[2], fsname);
     return;
   }
-  fprintf(stdout, "\nwrite to %s by fs %s:\n", dent->d_name.name, fsname);
+  fprintf(stdout, "\nwrite to file %s by fs %s:\n", dent->d_name.name, fsname);
   const struct qstr q_filename =
       { .name = (unsigned char *)filename, .len = strlen(filename) };
   struct dentry* const file_dent = d_alloc(dent, &q_filename);

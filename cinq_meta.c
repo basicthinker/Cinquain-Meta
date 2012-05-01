@@ -40,6 +40,7 @@ const struct inode_operations cinq_dir_inode_operations = {
 	.unlink		= cinq_unlink,
 	.symlink	= cinq_symlink,
 	.mkdir		= cinq_mkdir,
+  .mknod    = cinq_mknod,
 	.rmdir		= cinq_rmdir,
 	.rename		= cinq_rename,
 	.setattr	= cinq_setattr

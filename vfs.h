@@ -18,6 +18,7 @@
 #include "util.h"
 
 #define invalidate_inode_buffers(inode)
+#define init_special_inode(inode, mode, dev)
 
 // include/linux/fs.h
 /*
