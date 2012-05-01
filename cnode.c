@@ -433,12 +433,16 @@ static int cinq_mkinode_(struct inode *dir, struct dentry *dentry,
     write_unlock(&parent->ci_children_lock);
     DEBUG_(">>> cinq_mkinode_(1): tag existing cnode %s by %s.\n",
            child->ci_name, req_fs->fs_name);
+    
     write_lock(&child->ci_tags_lock);
     tag = cnode_find_tag_(child, req_fs);
     if (unlikely(tag)) {
-      DEBUG_("[Error@cinq_mknod] mknod meets an existing one: %s\n",
-             tag->t_host->ci_name);
-      wr_release_return(&child->ci_tags_lock, -EINVAL);
+      if (negative(tag)) cnode_rm_tag_(child, tag);
+      else {
+        DEBUG_("[Error@cinq_mkinode_] cinq_mkinode_ meets existing '%s'.\n",
+               tag->t_host->ci_name);
+        wr_release_return(&child->ci_tags_lock, -EINVAL);
+      }
     }
     
     tag = tag_new_(req_fs, mode >> CINQ_MODE_SHIFT, inode);
@@ -504,10 +508,11 @@ int cinq_symlink(struct inode *dir, struct dentry *dentry,
   if (!err) {
     struct inode *inode = dentry->d_inode;
     struct cinq_tag *tag = i_tag(inode);
-    int size = sizeof(symname);
-    tag->t_symname = (char *)malloc(size);
+    int len = strlen(symname);
+    tag->t_symname = (char *)malloc(len + 1);
     if (!tag->t_symname) return -ENOSPC;
-    memcpy(tag->t_symname, symname, size);
+    strncpy(tag->t_symname, symname, len + 1);
+    DEBUG_("cinq_symlink: symlink to '%s'.\n", tag->t_symname);
   }
   return err;
 }
@@ -794,6 +799,7 @@ int cinq_rmdir(struct inode *dir, struct dentry *dentry) {
 
 void *cinq_follow_link(struct dentry *dentry, struct nameidata *nd) {
   struct cinq_tag *tag = i_tag(dentry->d_inode);
+  DEBUG_("cinq_follow_link: follow link to '%s'.\n", (char *)tag->t_symname);
   nd_set_link(nd, (char *)tag->t_symname);
   return NULL;
 }
