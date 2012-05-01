@@ -810,12 +810,12 @@ static inline void setattr_copy(struct inode *inode, const struct iattr *attr)
 extern int simple_getattr(struct vfsmount *mnt, struct dentry *dentry,
                           struct kstat *stat);
 
-static ssize_t generic_read_dir(struct file *filp, char *buf, size_t siz, loff_t *ppos)
+static inline ssize_t generic_read_dir(struct file *filp, char *buf, size_t siz, loff_t *ppos)
 {
   return -EISDIR;
 }
 
-static int noop_fsync(struct file *file, int datasync)
+static inline int noop_fsync(struct file *file, int datasync)
 {
   return 0;
 }
@@ -828,6 +828,10 @@ static inline ino_t parent_ino(struct dentry *dentry)
   res = dentry->d_parent->d_inode->i_ino;
   spin_unlock(&dentry->d_lock);
   return res;
+}
+
+static inline void i_size_write(struct inode *inode, loff_t i_size) {
+  inode->i_size = i_size;
 }
 
 #else

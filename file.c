@@ -11,43 +11,70 @@
 //
 
 #include "cinq_meta.h"
+#include "cinq_cache/cinq_cache.h"
 
-int cinq_file_open(struct inode *inode, struct file *file) {
-  char *fingerprint;
-  int fp_len;
-  if (file->private_data) {
-    fingerprint = file->private_data;
-    fp_len = FILE_HASH_WIDTH;
-  } else {
-    fingerprint = (char *)file->f_path.dentry->d_name.name;
-    fp_len = strlen(fingerprint);
-  }
-  return 0;
-}
+#define SPNFS_DELIM_POS 7 // for spnfs style file name 
 
 ssize_t cinq_file_read(struct file *filp, char *buf, size_t len, loff_t *ppos) {
-  char *str = "abcdefghijklmnopqrstuvwxyz\n";
-  if (*ppos == strlen(str)) return 0;
+  struct fingerprint fp;
+  struct data_set *ds;
+  struct data_entry *cur;
+  char *fname = (char *)filp->f_dentry->d_name.name;
+  loff_t buf_offset;
+  loff_t data_offset;
+  size_t cpy_len;
+  loff_t filend = filp->f_pos + len;
+  loff_t curend;
   
-  bufcpy(buf, str + filp->f_pos, 1);
-  // filp->f_pos += 1;
-  *ppos += 1;
-  return 1;
+  if (*ppos >= filp->f_dentry->d_inode->i_size) return 0;
+  
+  fp.uid = 0;
+  strncpy(fp.value, fname, SPNFS_DELIM_POS - 1);
+  strncpy((char *)fp.value + SPNFS_DELIM_POS - 1,
+          fname + SPNFS_DELIM_POS, FINGERPRINT_BYTES - SPNFS_DELIM_POS + 1);
+  ds = wcache_read(&fp, filp->f_pos, len);
+  
+  list_for_each_entry(cur, &ds->entries, entry) {
+    curend = cur->offset + cur->len;
+    if (cur->offset < filp->f_pos) {
+      buf_offset = 0;
+      data_offset = filp->f_pos - cur->offset;
+    } else {
+      buf_offset = cur->offset - filp->f_pos;
+      data_offset = 0;
+    }
+    cpy_len = curend > filend ?
+        filend - cur->offset - data_offset : cur->len - data_offset;
+    bufcpy(buf + buf_offset, cur->data + data_offset, cpy_len);
+    DEBUG_ON_(cur->offset + data_offset + cpy_len > filend,
+              "[Err@cinq_file_read] cache provides more than expected: %lld.\n",
+              cur->offset + data_offset + cpy_len);
+    *ppos += cpy_len;
+  }
+  return *ppos - filp->f_pos;
 }
 
 ssize_t cinq_file_write(struct file *filp, const char *buf, size_t len,
                         loff_t *ppos) {
-//  DEBUG_("cinq_file_write: TO DO write to memory cache: %c", *buf);
-//  *ppos += 1;
-//  return 1;
+  struct fingerprint fp;
+  struct data_entry de;
+  struct inode *inode = filp->f_path.dentry->d_inode;
+  char *fname = (char *)filp->f_dentry->d_name.name;
+  
+  strncpy(fp.value, fname, SPNFS_DELIM_POS - 1);
+  strncpy((char *)fp.value + SPNFS_DELIM_POS - 1,
+          fname + SPNFS_DELIM_POS, FINGERPRINT_BYTES - SPNFS_DELIM_POS + 1);
+  
+  de.data = (char *)buf;
+  de.offset = filp->f_pos;
+  de.len = len;
+  
+  wcache_write(&fp, &de);
   *ppos += len;
+  if (*ppos > inode->i_size) {
+    i_size_write(inode, *ppos);
+  }
   return len;
-}
-
-int cinq_file_release(struct inode * inode, struct file * filp) {
-  DEBUG_("cinq_file_release: TO DO flush to back store.\n");
-  filp->private_data = "fingerprint";
-  return 0;
 }
 
 int cinq_dir_open(struct inode *inode, struct file *filp) {

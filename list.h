@@ -3,6 +3,8 @@
 
 // This is a partial header file included in util.h
 
+#define prefetch(x) __builtin_prefetch(x)
+
 /*
  * Simple doubly linked list implementation.
  *

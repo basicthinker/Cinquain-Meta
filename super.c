@@ -11,6 +11,7 @@
 //
 
 #include "cinq_meta.h"
+#include "cinq_cache/cinq_cache.h"
 #include "thread.h"
 
 struct cinq_file_systems file_systems;
@@ -61,6 +62,7 @@ struct dentry *cinq_mount(struct file_system_type *fs_type, int flags,
                            const char *dev_name, void *data) {
   cfs_init(&file_systems);
   journal_init(&cinq_journal, "Cinquain");
+  rwcache_init();
   thread_init(&journal_thread, journal_writeback, &cinq_journal,
               "cinquain-journal");
   thread_run(&journal_thread);
@@ -72,6 +74,7 @@ void cinq_kill_sb(struct super_block *sb) {
     while (!journal_empty_syn(&cinq_journal)) {
       sleep(1);
     }
+    rwcache_fini();
     thread_stop(&journal_thread);
     fsnode_evict_all(META_FS);
     d_genocide(sb->s_root);

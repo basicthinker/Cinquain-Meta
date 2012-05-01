@@ -3,13 +3,18 @@ EXTRA_CFLAGS = -std=gnu99 -g -pthread -Wall -DCINQ_DEBUG -DHASH_DEBUG=1
 # EXTRA_CFLAGS = -std=gnu99 -pthread -Wall -Os
 LIB = -lpthread
 OBJDIR = obj
-KSRC = /lib/modules/`uname -r`/build
+SUBPROJ = cinq_cache
+
 SRC := $(wildcard *.c)
 OBJ := $(SRC:%.c=$(OBJDIR)/%.o)
+OBJ += $(SUBPROJ)/cinq_cache.o $(SUBPROJ)/rbtree.o
 
-all : dir test
+all : dir subproj test
 
-test: $(OBJ)
+subproj :
+	cd $(SUBPROJ) && $(MAKE)
+
+test : $(OBJ)
 	$(CC) $(EXTRA_CFLAGS) $(LIB) -o $@ $^
 
 $(OBJDIR)/%.o : %.c
@@ -21,4 +26,5 @@ dir :
 	mkdir -p $(OBJDIR)
 
 clean :
+	cd $(SUBPROJ) && $(MAKE) clean
 	rm -rf $(OBJDIR) test

@@ -59,9 +59,6 @@ const struct inode_operations cinq_symlink_inode_operations = {
 const struct file_operations cinq_file_operations = {
 	.read     = cinq_file_read,
 	.write		= cinq_file_write,
-	.open     = cinq_file_open,
-	.release	= cinq_file_release,
-  
   .fsync    = noop_fsync,
   .llseek   = generic_file_llseek
 };
@@ -84,7 +81,7 @@ struct kmem_cache *cinq_jentry_cachep;
 
 static int __init init_cinq_fs(void) {
   int err;
-
+  
   err = init_cnode_cache();
   if (err) goto free_cnode;
 

@@ -577,6 +577,60 @@ static void *rand_sym(void *droot) {
   pthread_exit(NULL);
 }
 
+// Includes examples for invoking cinq_file_read(), cinq_file_write()
+static void test_rw(struct dentry *droot) {
+  struct dentry *dent;
+  char *fsname, *filename;
+  const int k_num_seg = 4;
+  char dir[k_num_seg][MAX_NAME_LEN + 1];
+  int mode = (CINQ_VISIBLE << CINQ_MODE_SHIFT) | S_IFREG | S_IRWXO | S_IRGRP;
+  
+  fsname = "0_4_3";
+  filename = "123456.0123456789";
+  strcpy(dir[0], fsname);
+  strcpy(dir[1], "3");
+  strcpy(dir[2], "3.2");
+  dent = do_lookup_(droot, dir, 3);
+  if (!dent || !dent->d_inode) {
+    DEBUG_("[Error@test_rw] cannot find %s of %s.\n", dir[2], fsname);
+    return;
+  }
+  fprintf(stdout, "\nwrite to %s by fs %s:\n", dent->d_name.name, fsname);
+  const struct qstr q_filename =
+      { .name = (unsigned char *)filename, .len = strlen(filename) };
+  struct dentry* const file_dent = d_alloc(dent, &q_filename);
+  
+  if (dent->d_inode->i_op->create(dent->d_inode, file_dent, mode, NULL)) {
+    DEBUG_("[Error@rand_create_ln_rm] failed to create %s.\n", filename);
+    return;
+  }
+
+  // Example for invoking cinq_file_write()
+  char *outbuf = "123456789";
+  struct file *out_filp = dentry_open(file_dent, NULL, 0, NULL);
+  loff_t offset = 0;
+  for (int i = 0; i < 10; ++i) {
+    out_filp->f_op->write(out_filp, outbuf, strlen(outbuf), &offset);
+    out_filp->f_pos = offset;
+  }
+  put_filp(out_filp);
+  fprintf(stdout, "write 10 times: %s\n", outbuf);
+  
+  // Example for invoking cinq_read_read()
+  char inbuf[7];
+  char result[100];
+  offset = 0;
+  struct file *in_filp = dentry_open(file_dent, NULL, 0, NULL);
+  unsigned long len = 0;
+  while ((len = in_filp->f_op->read(in_filp, inbuf, 7, &offset))) {
+    strncpy((char *)result + in_filp->f_pos, inbuf, len);
+    in_filp->f_pos = offset;
+  }
+  result[in_filp->f_pos] = '\0';
+  put_filp(in_filp);
+  fprintf(stdout, "read: %s\n", result);
+}
+
 int main(int argc, const char * argv[]) {
   // Start point
   struct dentry *meta_dent = cinqfs.mount((struct file_system_type *)&cinqfs,
@@ -670,6 +724,8 @@ int main(int argc, const char * argv[]) {
   int max_dentry_num = atomic_read(&num_dentry_);
   int max_inode_num = atomic_read(&num_inode_);
 #endif
+
+  test_rw(meta_dent);
   
   // Kill file systems
   cinqfs.kill_sb(meta_dent->d_sb);
