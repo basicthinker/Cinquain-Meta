@@ -13,13 +13,31 @@
 #include "cinq_meta.h"
 #include "cinq_cache/cinq_cache.h"
 
-#define SPNFS_DELIM_POS 7 // for spnfs style file name 
+#ifdef SPNFS_
+
+#define SPNFS_DELIM_POS 7 // for spnfs style file name
+
+static inline void cfp_set_value(struct fingerprint *fp, struct file *filp) {
+  char *spnfs_name = (char *)filp->f_dentry->d_name.name;
+  strncpy(fp->value, spnfs_name, SPNFS_DELIM_POS - 1);
+  strncpy((char *)fp->value + SPNFS_DELIM_POS - 1,
+          spnfs_name + SPNFS_DELIM_POS,
+          FINGERPRINT_BYTES - SPNFS_DELIM_POS + 1);
+}
+#else
+
+static inline void cfp_set_value(struct fingerprint *fp, struct file *filp) {
+  memset(fp->value, 0, sizeof(fp->value));
+  u64 hash = hash_64(filp->f_path.dentry->d_inode->i_ino, 64);
+  *((unsigned long *)&fp->value) = hash;
+}
+
+#endif // SPNFS_
 
 ssize_t cinq_file_read(struct file *filp, char *buf, size_t len, loff_t *ppos) {
   struct fingerprint fp;
   struct data_set *ds;
   struct data_entry *cur;
-  char *fname = (char *)filp->f_dentry->d_name.name;
   loff_t buf_offset;
   loff_t data_offset;
   size_t cpy_len;
@@ -29,9 +47,8 @@ ssize_t cinq_file_read(struct file *filp, char *buf, size_t len, loff_t *ppos) {
   if (*ppos >= filp->f_dentry->d_inode->i_size) return 0;
   
   fp.uid = 0;
-  strncpy(fp.value, fname, SPNFS_DELIM_POS - 1);
-  strncpy((char *)fp.value + SPNFS_DELIM_POS - 1,
-          fname + SPNFS_DELIM_POS, FINGERPRINT_BYTES - SPNFS_DELIM_POS + 1);
+  cfp_set_value(&fp, filp);
+
   ds = wcache_read(&fp, filp->f_pos, len);
   
   list_for_each_entry(cur, &ds->entries, entry) {
@@ -63,10 +80,9 @@ ssize_t cinq_file_write(struct file *filp, const char *buf, size_t len,
   
   DEBUG_("cinq_file_write: write to '%s' with len = %ld\n", fname, len);
   
-  strncpy(fp.value, fname, SPNFS_DELIM_POS - 1);
-  strncpy((char *)fp.value + SPNFS_DELIM_POS - 1,
-          fname + SPNFS_DELIM_POS, FINGERPRINT_BYTES - SPNFS_DELIM_POS + 1);
-  
+  fp.uid = 0;
+  cfp_set_value(&fp, filp);
+
   de.data = (char *)buf;
   de.offset = filp->f_pos;
   de.len = len;

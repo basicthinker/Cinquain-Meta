@@ -26,6 +26,7 @@
 #include <linux/list.h>
 #include <linux/pagemap.h>
 #include <linux/delay.h>
+#include <linux/hash.h>
 
 #else
 
@@ -103,6 +104,29 @@ static inline void *ERR_PTR(long error) { // include/linux/err.h
 
 static inline long PTR_ERR(const void *ptr) { // include/linux/err.h
   return (long) ptr;
+}
+
+static inline u64 hash_64(u64 val, unsigned int bits)
+{
+	u64 hash = val;
+  
+	/*  Sigh, gcc can't optimise this alone like it does for 32 bits. */
+	u64 n = hash;
+	n <<= 18;
+	hash -= n;
+	n <<= 33;
+	hash -= n;
+	n <<= 3;
+	hash += n;
+	n <<= 3;
+	hash -= n;
+	n <<= 4;
+	hash += n;
+	n <<= 2;
+	hash += n;
+  
+	/* High bits are more random, so use them. */
+	return hash >> (64 - bits);
 }
 
 #include "include-asm-generic-errno.h"
