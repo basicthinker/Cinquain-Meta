@@ -75,6 +75,12 @@ const struct file_operations cinq_dir_operations = {
   .fsync    = noop_fsync
 };
 
+const struct export_operations cinq_export_operations = {
+	.get_parent     = cinq_get_parent,
+	.encode_fh      = cinq_encode_fh,
+	.fh_to_dentry	= cinq_fh_to_dentry,
+};
+
 #ifdef __KERNEL__
 
 struct kmem_cache *UT_hash_table_cachep;

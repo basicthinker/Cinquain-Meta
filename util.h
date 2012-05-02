@@ -66,8 +66,10 @@ typedef unsigned int umode_t;
 typedef unsigned int uid_t;
 typedef unsigned int gid_t;
 typedef uint32_t __u32;
+typedef uint64_t __u64;
 typedef uint8_t u8;
 typedef uint32_t u32;
+typedef uint16_t u16;
 typedef uint64_t u64;
 typedef unsigned fmode_t;
 
@@ -95,8 +97,6 @@ typedef pthread_mutex_t spinlock_t;
 typedef pthread_mutex_t mutex_t;
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
-
-#define CURRENT_TIME_SEC ((struct timespec) { time(NULL), 0 })
 
 static inline void *ERR_PTR(long error) { // include/linux/err.h
   return (void *) error;
@@ -197,6 +197,7 @@ static inline u64 hash_64(u64 val, unsigned int bits)
 #define bufcpy(des, src, len) memcpy(des, src, len)
 
 #define CURRENT_TIME ((struct timespec) { time(NULL), 0 })
+#define get_seconds() (CURRENT_TIME.tv_sec)
 
 #endif // __KERNEL__
 

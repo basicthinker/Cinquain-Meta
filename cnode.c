@@ -214,6 +214,7 @@ static struct inode *cinq_get_inode_(const struct inode *dir, int mode,
                                      dev_t dev) {
   struct super_block *sb = dir->i_sb;
   struct inode * inode = new_inode(sb);
+  inode->i_generation = get_seconds();
   if (inode) {
     inode_init_owner(inode, dir, mode);
     // inode->i_ino is set when host tag is allocated
@@ -847,7 +848,7 @@ static inline int cinq_setsize_(struct inode *inode, loff_t newsize) {
 		return -EINVAL;
   
   inode->i_size = newsize;
-	inode->i_mtime = inode->i_ctime = CURRENT_TIME_SEC;
+	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
 	
   journal_inode(inode, UPDATE);
 

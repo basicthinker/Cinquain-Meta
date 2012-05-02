@@ -40,6 +40,7 @@ static int cinq_fill_super_(struct super_block *sb, void *data, int silent) {
   sb->s_blocksize_bits = PAGE_CACHE_SHIFT;
 	sb->s_magic	= CINQ_MAGIC;
 	sb->s_op = &cinq_super_operations;
+  sb->s_export_op = &cinq_export_operations;
 	sb->s_time_gran	= 1;
   
 	inode = cnode_make_tree(sb);

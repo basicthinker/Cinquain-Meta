@@ -19,6 +19,7 @@
 
 #define invalidate_inode_buffers(inode)
 #define init_special_inode(inode, mode, dev)
+#define d_find_alias(inode) NULL
 
 // include/linux/fs.h
 /*
@@ -591,6 +592,40 @@ struct file_operations {
 	// ssize_t (*splice_read)(struct file *, loff_t *, struct pipe_inode_info *, size_t, unsigned int);
 	// int (*setlease)(struct file *, long, struct file_lock **);
 	long (*fallocate)(struct file *file, int mode, loff_t offset, loff_t len);
+};
+
+
+struct fid {
+	union {
+		struct {
+			u32 ino;
+			u32 gen;
+			u32 parent_ino;
+			u32 parent_gen;
+		} i32;
+ 		struct {
+ 			u32 block;
+ 			u16 partref;
+ 			u16 parent_partref;
+ 			u32 generation;
+ 			u32 parent_block;
+ 			u32 parent_generation;
+ 		} udf;
+		__u32 raw[0];
+	};
+};
+
+struct export_operations {
+	int (*encode_fh)(struct dentry *de, __u32 *fh, int *max_len,
+                   int connectable);
+	struct dentry * (*fh_to_dentry)(struct super_block *sb, struct fid *fid,
+                                  int fh_len, int fh_type);
+	struct dentry * (*fh_to_parent)(struct super_block *sb, struct fid *fid,
+                                  int fh_len, int fh_type);
+	int (*get_name)(struct dentry *parent, char *name,
+                  struct dentry *child);
+	struct dentry * (*get_parent)(struct dentry *child);
+	int (*commit_metadata)(struct inode *inode);
 };
 
 

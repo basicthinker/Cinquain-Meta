@@ -278,6 +278,47 @@ extern const struct inode_operations cinq_file_inode_operations;
 extern const struct inode_operations cinq_symlink_inode_operations;
 extern const struct file_operations cinq_file_operations;
 extern const struct file_operations cinq_dir_operations;
+extern const struct export_operations cinq_export_operations;
+
+/* NOT used in user space */
+
+static inline struct dentry *cinq_get_parent(struct dentry *child) {
+	return ERR_PTR(-ESTALE);
+}
+
+static inline struct dentry *cinq_fh_to_dentry(struct super_block *sb,
+                                               struct fid *fid, int fh_len,
+                                               int fh_type) {
+	struct inode *inode;
+	struct dentry *dentry = NULL;
+	u64 inum = fid->raw[2];
+	inum = (inum << 32) | fid->raw[1];
+  
+	if (fh_len < 3)
+		return NULL;
+  
+	inode = (struct inode *)inum;
+  
+  dentry = d_find_alias(inode);
+  iput(inode);
+  
+	return dentry;
+}
+
+static inline int cinq_encode_fh(struct dentry *dentry, __u32 *fh, int *len,
+                                 int connectable) {
+	struct inode *inode = dentry->d_inode;
+  
+	if (*len < 3)
+		return 255;
+  
+	fh[0] = inode->i_generation;
+	fh[1] = inode->i_ino;
+	fh[2] = ((__u64)inode->i_ino) >> 32;
+  
+	*len = 3;
+	return 1;
+}
 
 #ifdef __KERNEL__
 
