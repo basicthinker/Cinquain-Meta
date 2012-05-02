@@ -137,13 +137,14 @@ static inline struct cinq_fsnode *i_fs(const struct inode *inode) {
   return i_tag(inode)->t_fs;
 }
 
-static inline struct inode *cinq_iget(struct super_block *sb,
-                                      unsigned long int ino) {
-  return ((struct cinq_tag *)ino)->t_inode;
-}
-
 static inline int negative(const struct cinq_tag *tag) {
   return tag->t_inode == NULL;
+}
+
+static inline struct inode *cinq_iget(struct super_block *sb,
+                                      unsigned long int ino) {
+  struct cinq_tag *tag = (struct cinq_tag *)ino;
+  return negative(tag) ? NULL : tag->t_inode;
 }
 
 static inline int impenetrable(const struct cinq_tag *tag,
@@ -280,45 +281,6 @@ extern const struct file_operations cinq_file_operations;
 extern const struct file_operations cinq_dir_operations;
 extern const struct export_operations cinq_export_operations;
 
-/* NOT used in user space */
-
-static inline struct dentry *cinq_get_parent(struct dentry *child) {
-	return ERR_PTR(-ESTALE);
-}
-
-static inline struct dentry *cinq_fh_to_dentry(struct super_block *sb,
-                                               struct fid *fid, int fh_len,
-                                               int fh_type) {
-	struct inode *inode;
-	struct dentry *dentry = NULL;
-	u64 inum = fid->raw[2];
-	inum = (inum << 32) | fid->raw[1];
-  
-	if (fh_len < 3)
-		return NULL;
-  
-	inode = (struct inode *)inum;
-  
-  dentry = d_find_alias(inode);
-  iput(inode);
-  
-	return dentry;
-}
-
-static inline int cinq_encode_fh(struct dentry *dentry, __u32 *fh, int *len,
-                                 int connectable) {
-	struct inode *inode = dentry->d_inode;
-  
-	if (*len < 3)
-		return 255;
-  
-	fh[0] = inode->i_generation;
-	fh[1] = inode->i_ino;
-	fh[2] = ((__u64)inode->i_ino) >> 32;
-  
-	*len = 3;
-	return 1;
-}
 
 #ifdef __KERNEL__
 
@@ -327,6 +289,88 @@ extern void destroy_cnode_cache(void);
 
 extern int init_fsnode_cache(void);
 extern void destroy_fsnode_cache(void);
+
+/* NOT used in user space */
+
+static struct backing_dev_info cinq_backing_dev_info  __read_mostly = {
+	.ra_pages	= 0,	/* No readahead */
+	.capabilities	= BDI_CAP_NO_ACCT_AND_WRITEBACK | BDI_CAP_SWAP_BACKED,
+#ifdef __OLD_KERNEL__
+  .unplug_io_fn	= default_unplug_io_fn,
+#endif // __OLD_KERNEL__
+};
+
+static struct dentry *cinq_get_parent(struct dentry *child) {
+	return ERR_PTR(-ESTALE);
+}
+
+static int cinq_match(struct inode *ino, void *vfh) {
+	__u32 *fh = vfh;
+	__u64 inum = fh[2];
+	inum = (inum << 32) | fh[1];
+	return ino->i_ino == inum && fh[0] == ino->i_generation;
+}
+
+static struct dentry *cinq_fh_to_dentry(struct super_block *sb,
+                                        struct fid *fid, int fh_len,
+                                        int fh_type) {
+	struct inode *inode;
+	struct dentry *dentry = NULL;
+	u64 inum = fid->raw[2];
+	inum = (inum << 32) | fid->raw[1];
+  
+	if (fh_len < 3)
+		return NULL;
+  
+  inode = cinq_iget(NULL, inum);
+  if (!inode)
+    printk(KERN_ERR "cinq_fh_to_dentry: meets negative tag.");
+  else if (inode->i_ino == inum)
+    printk(KERN_ERR "cinq_fh_to_dentry: cast OK.");
+  else printk(KERN_ERR "cinq_fh_to_dentry: cast NOT OK.");
+  
+	inode = ilookup5(sb, (unsigned long)(inum + fid->raw[0]),
+                   cinq_match, fid->raw);
+	if (inode) {
+		dentry = d_find_alias(inode);
+		iput(inode);
+	} else printk(KERN_ERR "cinq_fh_to_dentry: NOT found inode.");
+  
+  if (!dentry) printk(KERN_ERR "cinq_fh_to_dentry: NOT found dentry.");
+  else printk(KERN_ERR "cinq_fh_to_dentry: found dentry '%s' with parent '%s'.",
+              dentry->d_name.name, 
+              dentry->d_parent ? dentry->d_parent->d_name.name : "null");
+	return dentry;
+}
+
+static int cinq_encode_fh(struct dentry *dentry, __u32 *fh, int *len,
+                          int connectable) {
+	struct inode *inode = dentry->d_inode;
+  
+	if (*len < 3)
+		return 255;
+  
+	if (inode_unhashed(inode)) {
+		/* Unfortunately insert_inode_hash is not idempotent,
+		 * so as we hash inodes here rather than at creation
+		 * time, we need a lock to ensure we only try
+		 * to do it once
+		 */
+		static DEFINE_SPINLOCK(lock);
+		spin_lock(&lock);
+		if (inode_unhashed(inode))
+			__insert_inode_hash(inode,
+                          inode->i_ino + inode->i_generation);
+		spin_unlock(&lock);
+	}
+  
+	fh[0] = inode->i_generation;
+	fh[1] = inode->i_ino;
+	fh[2] = ((__u64)inode->i_ino) >> 32;
+  
+	*len = 3;
+	return 1;
+}
 
 #endif
 

@@ -197,7 +197,6 @@ static inline u64 hash_64(u64 val, unsigned int bits)
 #define bufcpy(des, src, len) memcpy(des, src, len)
 
 #define CURRENT_TIME ((struct timespec) { time(NULL), 0 })
-#define get_seconds() (CURRENT_TIME.tv_sec)
 
 #endif // __KERNEL__
 

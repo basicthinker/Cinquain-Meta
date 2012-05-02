@@ -214,8 +214,13 @@ static struct inode *cinq_get_inode_(const struct inode *dir, int mode,
                                      dev_t dev) {
   struct super_block *sb = dir->i_sb;
   struct inode * inode = new_inode(sb);
-  inode->i_generation = get_seconds();
+  
   if (inode) {
+#ifdef __KERNEL__
+    inode->i_generation = get_seconds();
+    inode->i_mapping->backing_dev_info = &cinq_backing_dev_info;
+#endif
+
     inode_init_owner(inode, dir, mode);
     // inode->i_ino is set when host tag is allocated
     inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
@@ -384,6 +389,7 @@ void cinq_destroy_inode(struct inode *inode) {
 }
 
 struct inode *cnode_make_tree(struct super_block *sb) {
+  int mode = S_IFDIR | S_IRWXUGO | S_ISVTX;
   struct cinq_inode *croot = cnode_new_("/");
   croot->ci_parent = croot;
   
@@ -392,11 +398,17 @@ struct inode *cnode_make_tree(struct super_block *sb) {
   if (!iroot) {
     return ERR_PTR(-ENOMEM);
   }
-  iroot->i_uid = 0;
-  iroot->i_gid = 0;
-  iroot->i_mode = S_IFDIR | S_IRWXU | S_IRGRP | S_IXGRP;
+  inode_init_owner(iroot, NULL, mode);
+  iroot->i_blocks = 0;
+  iroot->i_uid = current_fsuid();
+  iroot->i_gid = current_fsgid();
   iroot->i_mtime = iroot->i_atime = iroot->i_ctime = CURRENT_TIME;
+#ifdef __KERNEL__
+  iroot->i_generation = get_seconds();
+  iroot->i_mapping->backing_dev_info = &cinq_backing_dev_info;
+#endif
   // insert_inode_hash(inode);
+  inc_nlink(iroot); // as dir
   iroot->i_op = &cinq_dir_inode_operations;
   iroot->i_fop = &cinq_dir_operations;
 
@@ -475,6 +487,7 @@ static int cinq_mkinode_(struct inode *dir, struct dentry *dentry,
   }
   
   d_instantiate(dentry, tag->t_inode);
+  dget(dentry); // extra count to pin the dentry in core
   dir->i_mtime = dir->i_ctime = CURRENT_TIME;
   // journal_inode(dir, UPDATE);
   
@@ -582,7 +595,7 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
       cnode_add_tag_syn(dir_cnode, tag);
       
       d_instantiate(dentry, iroot);
-      dget(dentry); // prevents it from being freed
+      dget(dentry); // extra count to pin the dentry in core
       child_fs->fs_root = dentry;
       dentry->d_fsdata = child_fs;
       dir->i_mtime = dir->i_ctime = CURRENT_TIME;
@@ -729,6 +742,7 @@ int cinq_link(struct dentry *old_dentry, struct inode *dir,
   int err = cinq_tag_with_(dir, dentry, inode);
   if (!err) {
     d_instantiate(dentry, inode);
+    dget(dentry); // extra count to pin the dentry in core
     DEBUG_ON_(S_ISDIR(dentry->d_inode->i_mode),
               "[Warn@cinq_link] link to dir.\n");
     local_inc_ref(dir, dentry);
@@ -817,6 +831,10 @@ void *cinq_follow_link(struct dentry *dentry, struct nameidata *nd) {
 
 int cinq_rename(struct inode *old_dir, struct dentry *old_dentry,
                 struct inode *new_dir, struct dentry *new_dentry) {
+#ifdef __KERNEL__
+  printk(KERN_ERR "cinq_rename: not supported: '%s' -> '%s'\n",
+         old_dentry->d_name.name, new_dentry->d_name.name);
+#endif
 //  new_dentry->d_fsdata = new_dentry->d_parent->d_fsdata;
 //  if (unlikely(!new_dentry->d_fsdata)) {
 //    DEBUG_("[Error@cinq_rename] no fsnode is specified when moving %s\n",

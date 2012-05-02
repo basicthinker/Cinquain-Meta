@@ -76,9 +76,11 @@ const struct file_operations cinq_dir_operations = {
 };
 
 const struct export_operations cinq_export_operations = {
+#ifdef __KERNEL__
 	.get_parent     = cinq_get_parent,
 	.encode_fh      = cinq_encode_fh,
-	.fh_to_dentry	= cinq_fh_to_dentry,
+	.fh_to_dentry   = cinq_fh_to_dentry,
+#endif
 };
 
 #ifdef __KERNEL__
@@ -89,6 +91,9 @@ struct kmem_cache *cinq_jentry_cachep;
 static int __init init_cinq_fs(void) {
   int err;
   
+  err = bdi_init(&cinq_backing_dev_info);
+	if (err) goto destroy_bdi;
+
   err = init_cnode_cache();
   if (err) goto free_cnode;
 
@@ -117,10 +122,13 @@ free_cnode:
   destroy_cnode_cache();
 unregister:
   unregister_filesystem(&cinqfs);
+destroy_bdi:
+  bdi_destroy(&cinq_backing_dev_info);
   return err;
 }
 
 static void __exit exit_cinq_fs(void) {
+  bdi_destroy(&cinq_backing_dev_info);
   destroy_cnode_cache();
   destroy_fsnode_cache();
   destroy_jentry_cache();

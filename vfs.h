@@ -872,9 +872,11 @@ static inline void i_size_write(struct inode *inode, loff_t i_size) {
 
 #else
 
+#include <linux/exportfs.h>
 #include <linux/fs.h>
 #include <linux/namei.h>
 #include <linux/buffer_head.h>
+#include <linux/backing-dev.h>
 
 #endif // __KERNEL__
 #endif // CINQUAIN_META_VFS_H_
