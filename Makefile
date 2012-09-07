@@ -13,5 +13,5 @@ install:
 uninstall:
 	umount /mnt
 	rmmod cinqfs
-clean :
+clean:
 	$(MAKE) -C $(KSRC) M=`pwd` clean
