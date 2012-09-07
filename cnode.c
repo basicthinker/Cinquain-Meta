@@ -831,10 +831,6 @@ void *cinq_follow_link(struct dentry *dentry, struct nameidata *nd) {
 
 int cinq_rename(struct inode *old_dir, struct dentry *old_dentry,
                 struct inode *new_dir, struct dentry *new_dentry) {
-#ifdef __KERNEL__
-  printk(KERN_ERR "cinq_rename: not supported: '%s' -> '%s'\n",
-         old_dentry->d_name.name, new_dentry->d_name.name);
-#endif
 //  new_dentry->d_fsdata = new_dentry->d_parent->d_fsdata;
 //  if (unlikely(!new_dentry->d_fsdata)) {
 //    DEBUG_("[Error@cinq_rename] no fsnode is specified when moving %s\n",

@@ -322,25 +322,15 @@ static struct dentry *cinq_fh_to_dentry(struct super_block *sb,
 	if (fh_len < 3)
 		return NULL;
   
-  inode = cinq_iget(NULL, inum);
-  if (!inode)
-    printk(KERN_ERR "cinq_fh_to_dentry: meets negative tag.");
-  else if (inode->i_ino == inum)
-    printk(KERN_ERR "cinq_fh_to_dentry: cast OK.");
-  else printk(KERN_ERR "cinq_fh_to_dentry: cast NOT OK.");
-  
+//  inode = cinq_iget(NULL, inum); 
 	inode = ilookup5(sb, (unsigned long)(inum + fid->raw[0]),
                    cinq_match, fid->raw);
 	if (inode) {
 		dentry = d_find_alias(inode);
 		iput(inode);
-	} else printk(KERN_ERR "cinq_fh_to_dentry: NOT found inode.");
-  
+	} 
   if (!dentry) printk(KERN_ERR "cinq_fh_to_dentry: NOT found dentry.");
-  else printk(KERN_ERR "cinq_fh_to_dentry: found dentry '%s' with parent '%s'.",
-              dentry->d_name.name, 
-              dentry->d_parent ? dentry->d_parent->d_name.name : "null");
-	return dentry;
+  return dentry;
 }
 
 static int cinq_encode_fh(struct dentry *dentry, __u32 *fh, int *len,

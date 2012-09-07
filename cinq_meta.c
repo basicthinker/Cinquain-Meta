@@ -30,7 +30,11 @@ struct file_system_type cinqfs = {
 const struct super_operations cinq_super_operations = {
   .alloc_inode = cinq_alloc_inode,
   .destroy_inode = cinq_destroy_inode,
-  .evict_inode = cinq_evict_inode
+  .evict_inode = cinq_evict_inode,
+#ifdef __KERNEL__
+  .statfs = simple_statfs,
+  .show_options = generic_show_options,
+#endif
 };
 
 const struct inode_operations cinq_dir_inode_operations = {
