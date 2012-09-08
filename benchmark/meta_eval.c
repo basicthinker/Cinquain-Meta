@@ -47,7 +47,10 @@ int main(int argc, char *argv[]) {
 
   while (depth < fanout) {
     end_path(path, depth);
-    printf("%s\n", path);
+    if (mkdir(path, 0755) != 0) {
+      fprintf(stderr, "Error: creating dir %s.\n", path);
+      return -1;
+    }
     inc_path(path, 0);
     int cur, i;
     for (i = 0; i < depth; ++i) {
