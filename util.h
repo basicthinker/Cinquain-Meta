@@ -166,14 +166,6 @@ static inline u64 hash_64(u64 val, unsigned int bits)
 
 #define malloc(n) kmalloc(n, GFP_KERNEL)
 
-#define inode_malloc_() \
-    ((struct inode *)vmalloc(sizeof(struct inode)))
-#define inode_free_(p) (vfree(p))
-
-#define tag_malloc_() \
-    ((struct cinq_tag *)vmalloc(sizeof(struct cinq_tag)))
-#define tag_free_(p) (vfree(p))
-
 #define bufcpy(des, src, len) __copy_to_user(des, src, len)
 
 #define sleep(n) ssleep(n)
@@ -185,14 +177,6 @@ static inline u64 hash_64(u64 val, unsigned int bits)
 #define DEBUG_ON_(cond, ...) if (unlikely(cond)) { fprintf(stderr, __VA_ARGS__); }
 #define DEBUG_(...) (fprintf(stderr, __VA_ARGS__))
 #endif // CINQ_DEBUG
-
-#define inode_malloc_() \
-		((struct inode *)malloc(sizeof(struct inode)))
-#define inode_free_(p) (free(p))
-
-#define tag_malloc_() \
-    ((struct cinq_tag *)malloc(sizeof(struct cinq_tag)))
-#define tag_free_(p) (free(p))
 
 #define bufcpy(des, src, len) memcpy(des, src, len)
 

@@ -28,31 +28,31 @@ atomic_t num_inode_;
 // @data: can be NULL
 static int cinq_fill_super_(struct super_block *sb, void *data, int silent) {
   struct inode *inode = NULL;
-	struct dentry *root;
+  struct dentry *root;
   // int err;
 #ifdef __KERNEL__
   save_mount_options(sb, data);
 #endif
-	// err = cinq_parse_options(data, &fsi->mount_opts);
+  // err = cinq_parse_options(data, &fsi->mount_opts);
   
-	sb->s_maxbytes = MAX_LFS_FILESIZE;
+  sb->s_maxbytes = MAX_LFS_FILESIZE;
   sb->s_blocksize	= PAGE_CACHE_SIZE;
   sb->s_blocksize_bits = PAGE_CACHE_SHIFT;
-	sb->s_magic	= CINQ_MAGIC;
-	sb->s_op = &cinq_super_operations;
+  sb->s_magic	= CINQ_MAGIC;
+  sb->s_op = &cinq_super_operations;
   sb->s_export_op = &cinq_export_operations;
-	sb->s_time_gran	= 1;
+  sb->s_time_gran	= 1;
   
-	inode = cnode_make_tree(sb);
-	if (!inode) {
-		return -ENOMEM;
-	}
+  inode = cnode_make_tree(sb);
+  if (!inode) {
+	return -ENOMEM;
+  }
   
-	root = d_alloc_root(inode);
+  root = d_alloc_root(inode);
   if (!root) {
     cnode_evict_all(i_cnode(inode));
     return -ENOMEM;
-	}
+  }
   root->d_fsdata = META_FS;
   sb->s_root = root;
   
@@ -85,39 +85,15 @@ void cinq_kill_sb(struct super_block *sb) {
   DEBUG_ON_(!sb->s_root, "[Warn@cinq_kill_sb]: invoked on null dentry.\n");
 }
 
-struct inode *cinq_alloc_inode(struct super_block *sb) {
-  struct inode *inode = inode_malloc_();
-  INIT_LIST_HEAD(&inode->i_dentry);
-
-#ifdef __KERNEL__
-  inode_init_once(inode);
-#endif
-#ifdef CINQ_DEBUG
-  atomic_inc(&num_inode_);
-#endif // CINQ_DEBUG
-  
-  return inode;
-}
-
-// Not actually delte inodes since they are in-memory
-void cinq_evict_inode(struct inode *inode) {
-  if (!inode->i_nlink) { // && !is_bad_inode(inode)
-    invalidate_inode_buffers(inode);
-  }
-}
-
-
 THREAD_FUNC_(journal_writeback)(void *data) {
   struct cinq_journal *journal = data;
   struct cinq_jentry *entry;
-  int num = 0;
   
   while (!thread_should_stop()) {
     set_current_state(TASK_RUNNING);
     
     while (!journal_empty_syn(journal)) {
       entry = journal_get_syn(journal);
-      int key_size = sizeof(entry->key);
       switch (entry->action) {
         case CREATE:
           DEBUG_("journal (%d)\t- CREATE key %lx(%d).\n",
@@ -160,3 +136,4 @@ void journal_inode(struct inode *inode, enum journal_action action) {
   struct cinq_jentry *entry = jentry_new(&inode->i_ino, inode, action);
   journal_add_syn(&cinq_journal, entry);
 }
+

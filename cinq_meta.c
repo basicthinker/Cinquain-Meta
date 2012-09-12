@@ -101,6 +101,12 @@ static int __init init_cinq_fs(void) {
   err = init_cnode_cache();
   if (err) goto free_cnode;
 
+  err = init_tag_cache();
+  if (err) goto free_tag;
+
+  err = init_inode_cache();
+  if (err) goto free_inode;
+
   err = init_fsnode_cache();
   if (err) goto free_fsnode;
 
@@ -122,6 +128,10 @@ free_jentry:
   destroy_jentry_cache();
 free_fsnode:
   destroy_fsnode_cache();
+free_inode:
+  destroy_inode_cache();
+free_tag:
+  destroy_tag_cache();
 free_cnode:
   destroy_cnode_cache();
 unregister:

@@ -8,11 +8,10 @@ default:
 	$(MAKE) -C $(KSRC) M=`pwd`
 install:
 	insmod cinqfs.ko
-	mkdir -p mnt
-	mount -t cinqfs none mnt
+	mkdir -p /mnt
+	mount -t cinqfs none /mnt
 uninstall:
-	umount mnt
-	rm -rf mnt
+	umount /mnt
 	rmmod cinqfs
 clean :
 	$(MAKE) -C $(KSRC) M=`pwd` clean

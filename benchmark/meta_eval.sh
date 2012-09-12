@@ -1,17 +1,13 @@
 #! /bin/bash
 
-PATH_PRE='/home/basicthinker/Projects/cinquain-meta/mnt/vm'
-ENUM_CNT=1
+PATH_PRE='/mnt/vm'
+VM_CNT=4
 
-FANOUT=6
+FANOUT=5
 REPEAT=1
 
-for (( i=0; i<$ENUM_CNT; ++i ))
+for (( i=0; i<$VM_CNT; ++i ))
 do
-  mkdir -p "$PATH_PRE$i"
+  ./meta_eval "$PATH_PRE$i" $FANOUT $REPEAT &
 done
-
-for (( i=0; i<$ENUM_CNT; ++i ))
-do
-  ./meta_eval "$PATH_PRE$i" $FANOUT $REPEAT
-done
+wait

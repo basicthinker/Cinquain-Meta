@@ -20,6 +20,10 @@ inline void inc_path(char *path, int depth) {
   ++path[g_offset + 2 * depth + 1];
 }
 
+inline void dec_path(char *path, int depth) {
+  --path[g_offset + 2 * depth + 1];
+}
+
 inline void end_path(char *path, int depth) {
   path[g_offset + 2 * depth + 2] = '\0';
 }

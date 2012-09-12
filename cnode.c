@@ -16,10 +16,19 @@
 #ifdef __KERNEL__
 
 static struct kmem_cache *cinq_inode_cachep;
-
 #define cnode_malloc_() \
     ((struct cinq_inode *)kmem_cache_alloc(cinq_inode_cachep, GFP_KERNEL))
 #define cnode_free_(p) (kmem_cache_free(cinq_inode_cachep, p))
+
+static struct kmem_cache *cinq_tag_cachep;
+#define tag_malloc_() \
+    ((struct cinq_tag *)kmem_cache_alloc(cinq_tag_cachep, GFP_KERNEL))
+#define tag_free_(p) (kmem_cache_free(cinq_tag_cachep, p))
+
+static struct kmem_cache *vfs_inode_cachep;
+#define inode_malloc_() \
+    ((struct inode *)kmem_cache_alloc(vfs_inode_cachep, GFP_KERNEL))
+#define inode_free_(p) (kmem_cache_free(vfs_inode_cachep, p))
 
 #else
 
@@ -27,10 +36,60 @@ static struct kmem_cache *cinq_inode_cachep;
     ((struct cinq_inode *)malloc(sizeof(struct cinq_inode)))
 #define cnode_free_(p) (free(p))
 
+#define tag_malloc_() \
+    ((struct cinq_tag *)malloc(sizeof(struct cinq_tag)))
+#define tag_free_(p) (free(p))
+
+#define inode_malloc_(void) \
+    ((struct inode *)malloc(sizeof(struct inode)))
+#define inode_free_(p) (free(p))
+
 #endif // __KERNEL__
 
 static inline int cnode_is_root_(const struct cinq_inode *cnode) {
   return cnode->ci_parent == cnode;
+}
+
+// TODO Clustered on swappable pages if memory is constrained
+struct inode *cinq_alloc_inode(struct super_block *sb) {
+  struct inode *inode = inode_malloc_();
+  INIT_LIST_HEAD(&inode->i_dentry);
+
+#ifdef __KERNEL__
+  inode_init_once(inode);
+#endif
+#ifdef CINQ_DEBUG
+  atomic_inc(&num_inode_);
+#endif // CINQ_DEBUG
+
+  return inode;
+}
+
+// Not actually delte inodes since they are in-memory
+void cinq_evict_inode(struct inode *inode) {
+  if (!inode->i_nlink) { // && !is_bad_inode(inode)
+    invalidate_inode_buffers(inode);
+  }
+}
+
+// TODO
+void cinq_destroy_inode(struct inode *inode) {
+//  int empty_nlink = S_ISDIR(inode->i_mode) ? 2 : 1;
+//
+//#ifdef CINQ_DEBUG
+//    int nchild = atomic_read(&i_tag(inode)->t_nchild);
+//    DEBUG_ON_(inode->i_nlink - empty_nlink != nchild,
+//              "[Info@cinq_destroy_inode] nlink=%d, empty_nlink=%d, nchild=%d\n",
+//              inode->i_nlink, empty_nlink, nchild);
+//#endif // CINQ_DEBUG
+//
+//  if (inode->i_nlink == empty_nlink && !nchild) {
+//    inode_free_(inode);
+//
+//#ifdef CINQ_DEBUG
+//    atomic_dec(&num_inode_);
+//#endif // CINQ_DEBUG
+//  }
 }
 
 // creates a new tag without associating inode to it
@@ -118,6 +177,19 @@ static inline void cnode_rm_tag_syn(struct cinq_inode *cnode,
   write_lock(&cnode->ci_tags_lock);
   cnode_rm_tag_(cnode, tag);
   write_unlock(&cnode->ci_tags_lock);
+}
+
+
+static inline void tag_evict(struct cinq_tag *tag) {
+  if (tag->t_inode) {
+    inode_free_(tag->t_inode);
+
+#ifdef CINQ_DEBUG
+    atomic_dec(&num_inode_);
+#endif // CINQ_DEBUG
+  }
+  cnode_rm_tag_syn(tag->t_host, tag);
+  tag_free_(tag);
 }
 
 static struct cinq_inode *cnode_new_(char *name) {
@@ -208,6 +280,28 @@ static void cnode_evict(struct cinq_inode *cnode) {
   cnode_free_(cnode);
 }
 
+// This function is NOT thread safe, since it is used in the end,
+// and a single thread is proper then.
+void cnode_evict_all(struct cinq_inode *root) {
+  if (root->ci_children) {
+    struct cinq_inode *cur, *tmp;
+    HASH_ITER(ci_child, root->ci_children, cur, tmp) {
+      cnode_evict_all(cur);
+    }
+    DEBUG_ON_(root->ci_children != NULL,
+              "[Error@cnode_evict_all] not empty children: %lx\n", root->ci_id);
+  }
+  if (root->ci_tags) {
+    struct cinq_tag *cur, *tmp;
+    HASH_ITER(hh, root->ci_tags, cur, tmp) {
+      tag_evict(cur);
+    }
+    DEBUG_ON_(root->ci_tags != NULL,
+              "[Error@cnode_evict_all] not empty tags: %lx\n", root->ci_id);
+  }
+  cnode_evict(root);
+}
+
 // @dir: can be containing directory when adding new inode in it,
 //       or contained directory when its parents are tagged.
 static struct inode *cinq_get_inode_(const struct inode *dir, int mode,
@@ -296,18 +390,6 @@ static void cnode_tag_ancestors_(const struct dentry *dentry) {
   }
 }
 
-static inline void tag_evict(struct cinq_tag *tag) {
-  if (tag->t_inode) {
-    inode_free_(tag->t_inode);
-
-#ifdef CINQ_DEBUG
-  atomic_dec(&num_inode_);
-#endif // CINQ_DEBUG
-  }
-  cnode_rm_tag_syn(tag->t_host, tag);
-  tag_free_(tag);
-}
-
 static inline void local_inc_ref(struct inode *dir, struct dentry *dentry) {
   struct cinq_tag *dir_tag = i_tag(dir);
   struct inode *inode = dentry->d_inode;
@@ -344,48 +426,6 @@ static inline void local_drop_ref(struct inode *dir, struct dentry *dentry) {
   if (S_ISDIR(inode->i_mode)) {
     drop_nlink(tag->t_inode);
   }
-}
-
-// This function is NOT thread safe, since it is used in the end,
-// and a single thread is proper then.
-void cnode_evict_all(struct cinq_inode *root) {
-  if (root->ci_children) {
-    struct cinq_inode *cur, *tmp;
-    HASH_ITER(ci_child, root->ci_children, cur, tmp) {
-      cnode_evict_all(cur);
-    }
-    DEBUG_ON_(root->ci_children != NULL,
-              "[Error@cnode_evict_all] not empty children: %lx\n", root->ci_id);
-  }
-  if (root->ci_tags) {
-    struct cinq_tag *cur, *tmp;
-    HASH_ITER(hh, root->ci_tags, cur, tmp) {
-      tag_evict(cur);
-    }
-    DEBUG_ON_(root->ci_tags != NULL,
-              "[Error@cnode_evict_all] not empty tags: %lx\n", root->ci_id);
-  }
-  cnode_evict(root);
-}
-
-// TODO
-void cinq_destroy_inode(struct inode *inode) {
-//  int empty_nlink = S_ISDIR(inode->i_mode) ? 2 : 1;
-//
-//#ifdef CINQ_DEBUG
-//    int nchild = atomic_read(&i_tag(inode)->t_nchild);
-//    DEBUG_ON_(inode->i_nlink - empty_nlink != nchild,
-//              "[Info@cinq_destroy_inode] nlink=%d, empty_nlink=%d, nchild=%d\n",
-//              inode->i_nlink, empty_nlink, nchild);
-//#endif // CINQ_DEBUG
-//  
-//  if (inode->i_nlink == empty_nlink && !nchild) {
-//    inode_free_(inode);
-//    
-//#ifdef CINQ_DEBUG
-//    atomic_dec(&num_inode_);
-//#endif // CINQ_DEBUG
-//  }
 }
 
 struct inode *cnode_make_tree(struct super_block *sb) {
@@ -903,6 +943,32 @@ int init_cnode_cache(void) {
 
 void destroy_cnode_cache(void) {
   kmem_cache_destroy(cinq_inode_cachep);
+}
+
+int init_tag_cache(void) {
+  cinq_tag_cachep = kmem_cache_create(
+      "cinq_tag_cache", sizeof(struct cinq_tag), 0,
+      (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD), NULL);
+  if (cinq_tag_cachep == NULL)
+    return -ENOMEM;
+  return 0;
+}
+
+void destroy_tag_cache(void) {
+  kmem_cache_destroy(cinq_tag_cachep);
+}
+
+int init_inode_cache(void) {
+  vfs_inode_cachep = kmem_cache_create(
+      "vfs_inode_cache", sizeof(struct inode), 0,
+      (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD), NULL);
+  if (vfs_inode_cachep == NULL)
+    return -ENOMEM;
+  return 0;
+}
+
+void destroy_inode_cache(void) {
+  kmem_cache_destroy(vfs_inode_cachep);
 }
 
 #endif

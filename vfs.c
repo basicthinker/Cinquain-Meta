@@ -221,7 +221,7 @@ static inline struct inode *alloc_inode_(struct super_block *sb)
 	if (sb->s_op->alloc_inode)
 		inode = sb->s_op->alloc_inode(sb);
 	else
-		inode = inode_malloc_();
+		inode = (struct inode *)malloc(sizeof(struct inode));
   
 	if (!inode)
 		return NULL;

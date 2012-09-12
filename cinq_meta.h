@@ -287,6 +287,12 @@ extern const struct export_operations cinq_export_operations;
 extern int init_cnode_cache(void);
 extern void destroy_cnode_cache(void);
 
+extern int init_tag_cache(void);
+extern void destroy_tag_cache(void);
+
+extern int init_inode_cache(void);
+extern void destroy_inode_cache(void);
+
 extern int init_fsnode_cache(void);
 extern void destroy_fsnode_cache(void);
 
