@@ -286,7 +286,7 @@ void cnode_evict_all(struct cinq_inode *root) {
 }
 
 // @dir: can be containing directory when adding new inode in it,
-//       or contained directory when its parents are tagged.
+//       or contained directory when its parents are being tagged.
 static struct inode *cinq_get_inode_(const struct inode *dir, int mode,
                                      dev_t dev) {
   struct super_block *sb = dir->i_sb;
@@ -352,6 +352,7 @@ static void cnode_tag_ancestors_(const struct dentry *dentry) {
     if (!parent) {
       DEBUG_("[Error@cnode_tag_ancestors_] inode allocation failed "
              "when tagging ancestors of %s.\n", i_cnode(child)->ci_name);
+      write_unlock(&ci_parent->ci_tags_lock);
       return;
     }
     tag = tag_new_(fs, CINQ_VISIBLE, parent);
@@ -463,7 +464,7 @@ static int cinq_mkinode_(struct inode *dir, struct dentry *dentry,
   child = cnode_find_child_(parent, name);
   if (child) {
     write_unlock(&parent->ci_children_lock);
-    DEBUG_(">>> cinq_mkinode_(1): tag existing cnode %s by %s.\n",
+    DEBUG_(">>> cinq_mkinode_(1): tag existing cnode %s with %s.\n",
            child->ci_name, req_fs->fs_name);
     
     write_lock(&child->ci_tags_lock);
