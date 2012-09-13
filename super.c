@@ -72,8 +72,11 @@ struct dentry *cinq_mount(struct file_system_type *fs_type, int flags,
 
 void cinq_kill_sb(struct super_block *sb) {
   if (sb->s_root) {
-    while (!journal_empty_syn(&cinq_journal)) {
-      sleep(1);
+    int i = 0;
+    for (i = 0; i < NUM_WAY; ++i) {
+      while (!journal_empty_syn(&cinq_journal, i)) {
+        sleep(1);
+      }
     }
     rwcache_fini();
     thread_stop(&journal_thread);
@@ -86,33 +89,18 @@ void cinq_kill_sb(struct super_block *sb) {
 }
 
 THREAD_FUNC_(journal_writeback)(void *data) {
+  int i = 0;
   struct cinq_journal *journal = data;
   struct cinq_jentry *entry;
   
   while (!thread_should_stop()) {
     set_current_state(TASK_RUNNING);
     
-    while (!journal_empty_syn(journal)) {
-      entry = journal_get_syn(journal);
-      switch (entry->action) {
-        case CREATE:
-          DEBUG_("journal (%d)\t- CREATE key %lx(%d).\n",
-                 ++num, *((unsigned long *)entry->key), key_size);
-          break;
-        case UPDATE:
-          DEBUG_("journal (%d)\t- UPDATE key %lx(%d).\n",
-                 ++num, *((unsigned long *)entry->key), key_size);
-          break;
-        case DELETE:
-          DEBUG_("journal (%d)\t- UPDATE key %lx(%d).\n",
-                 ++num, *((unsigned long *)entry->key), key_size);
-          break;
-        default:
-          DEBUG_("[Error@journal_writeback] journal entry action is NOT valid:"
-                 " %d.\n", entry->action);
-          break;
+    for (i = 0; i < NUM_WAY; ++i) {
+	  while (!journal_empty_syn(journal, i)) {
+		entry = journal_get_syn(journal, i);
+		jentry_free(entry);
       }
-      jentry_free(entry);
     }
     
     set_current_state(TASK_INTERRUPTIBLE);

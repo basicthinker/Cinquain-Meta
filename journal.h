@@ -15,16 +15,24 @@
 
 #include "util.h"
 
+#define NUM_WAY 128
+#define WAY_MASK 0xff
+
 enum journal_action {
-  CREATE = 0,
-  UPDATE = 1,
-  DELETE = 2
+  mknod = 0 // covers cinq_mknod, cinq_create
 };
 
 struct cinq_jentry {
-  void *key;
-  void *data;
+  unsigned int sn;
   enum journal_action action;
+  union data {
+    struct {
+      unsigned long ci_id;
+      unsigned long fs_id;
+      char *name;
+      int mode;
+    } mknod;
+  };
   struct list_head list;
 };
 
@@ -44,13 +52,12 @@ extern struct kmem_cache *cinq_jentry_cachep;
 
 #endif // __KERNEL__
 
-static inline struct cinq_jentry *jentry_new(void *key, void *data,
-                                             enum journal_action action) {
-  struct cinq_jentry *new_entry = jentry_malloc_();
-  new_entry->key = key;
-  new_entry->data = data;
-  new_entry->action = action;
-  return new_entry;
+static atomic_t g_counter = ATOMIC_INIT(0);
+
+static inline struct cinq_jentry *jentry_new() {
+	struct cinq_jentry *jentry = jentry_malloc_();
+	jentry->sn = atomic_inc_return(&g_counter);
+	return jentry;
 }
 
 static inline void jentry_free(struct cinq_jentry *jentry) {
@@ -59,38 +66,42 @@ static inline void jentry_free(struct cinq_jentry *jentry) {
 
 struct cinq_journal {
   char *name;
-  struct list_head list;
-  spinlock_t lock;
+  struct list_head list[NUM_WAY];
+  spinlock_t lock[NUM_WAY];
 };
 
 static inline void journal_init(struct cinq_journal *journal, char *name) {
-  INIT_LIST_HEAD(&journal->list);
-  spin_lock_init(&journal->lock);
+  int i = 0;
+  for (i = 0; i < NUM_WAY; ++i) {
+	INIT_LIST_HEAD(&journal->list[i]);
+    spin_lock_init(&journal->lock[i]);
+  }
   journal->name = name;
 }
 
-static inline int journal_empty_syn(struct cinq_journal *journal) {
+static inline int journal_empty_syn(struct cinq_journal *journal, int way) {
   int ret;
-  spin_lock(&journal->lock);
-  ret = list_empty(&journal->list);
-  spin_unlock(&journal->lock);
+  spin_lock(&journal->lock[way]);
+  ret = list_empty(&journal->list[way]);
+  spin_unlock(&journal->lock[way]);
   return ret;
 }
 
-static inline struct cinq_jentry *journal_get_syn(struct cinq_journal *journal) {
+static inline struct cinq_jentry *journal_get_syn(struct cinq_journal *journal, int way) {
   struct list_head *head;
-  spin_lock(&journal->lock);
-  head = journal->list.next;
+  spin_lock(&journal->lock[way]);
+  head = journal->list[way].next;
   list_del(head);
-  spin_unlock(&journal->lock);
+  spin_unlock(&journal->lock[way]);
   return list_entry(head, struct cinq_jentry, list);
 }
 
 static inline void journal_add_syn(struct cinq_journal *journal,
                                    struct cinq_jentry *entry) {
-  spin_lock(&journal->lock);
-  list_add_tail(&entry->list, &journal->list);
-  spin_unlock(&journal->lock);
+  int way = entry->sn & WAY_MASK;
+  spin_lock(&journal->lock[way]);
+  list_add_tail(&entry->list, &journal->list[way]);
+  spin_unlock(&journal->lock[way]);
 }
 
 

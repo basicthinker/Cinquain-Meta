@@ -65,31 +65,14 @@ struct inode *cinq_alloc_inode(struct super_block *sb) {
   return inode;
 }
 
-// Not actually delte inodes since they are in-memory
+// Not actually delete inodes since they are in-memory
 void cinq_evict_inode(struct inode *inode) {
-  if (!inode->i_nlink) { // && !is_bad_inode(inode)
-    invalidate_inode_buffers(inode);
-  }
+
 }
 
 // TODO
 void cinq_destroy_inode(struct inode *inode) {
-//  int empty_nlink = S_ISDIR(inode->i_mode) ? 2 : 1;
-//
-//#ifdef CINQ_DEBUG
-//    int nchild = atomic_read(&i_tag(inode)->t_nchild);
-//    DEBUG_ON_(inode->i_nlink - empty_nlink != nchild,
-//              "[Info@cinq_destroy_inode] nlink=%d, empty_nlink=%d, nchild=%d\n",
-//              inode->i_nlink, empty_nlink, nchild);
-//#endif // CINQ_DEBUG
-//
-//  if (inode->i_nlink == empty_nlink && !nchild) {
-//    inode_free_(inode);
-//
-//#ifdef CINQ_DEBUG
-//    atomic_dec(&num_inode_);
-//#endif // CINQ_DEBUG
-//  }
+
 }
 
 // creates a new tag without associating inode to it
@@ -382,9 +365,6 @@ static void cnode_tag_ancestors_(const struct dentry *dentry) {
       to_ln_parent = 1;
     }
     
-    journal_inode(parent, CREATE);
-    journal_cnode(ci_parent, UPDATE);
-    
     ci_child = ci_parent;
     ci_parent = ci_child->ci_parent;
   }
@@ -504,9 +484,6 @@ static int cinq_mkinode_(struct inode *dir, struct dentry *dentry,
     }
     cnode_add_tag_(child, tag);
     write_unlock(&child->ci_tags_lock);
-    
-    journal_inode(inode, CREATE);
-    journal_cnode(child, UPDATE);
   } else {
     DEBUG_(">>> cinq_mkinode_(2): create cnode under %s by %s.\n",
            parent->ci_name, req_fs->fs_name);
@@ -520,10 +497,6 @@ static int cinq_mkinode_(struct inode *dir, struct dentry *dentry,
     cnode_add_tag_(child, tag);
     cnode_add_child_(parent, child);
     write_unlock(&parent->ci_children_lock);
-    
-    journal_inode(inode, CREATE);
-    journal_cnode(child, CREATE);
-    journal_cnode(parent, UPDATE);
   }
   
   d_instantiate(dentry, tag->t_inode);
@@ -556,7 +529,6 @@ int cinq_mknod(struct inode *dir, struct dentry *dentry, int mode, dev_t dev) {
            dentry->d_name.name, dir->i_ino);
     return -EINVAL;
   }
-  journal_inode(dir, CREATE);
   return cinq_mkinode_(dir, dentry, mode, NULL, dev);
 }
 
@@ -642,9 +614,6 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
       
       DEBUG_("<<< cinq_mkdir: created root dentry name %s, inode at %p.\n",
              dentry->d_name.name, dentry->d_inode);
-      journal_inode(iroot, CREATE);
-      journal_cnode(dir_cnode, UPDATE);
-      // journal_inode(dir, UPDATE);
     } else { // make inheritance
       DEBUG_(">>> cinq_mkdir: move fs %s to %s.\n", child_fs->fs_name,
              parent_fs == META_FS ? "META_FS" : parent_fs->fs_name);
@@ -748,8 +717,6 @@ static int cinq_tag_with_(struct inode *dir, struct dentry *dentry,
       wr_release_return(&child->ci_tags_lock, -ENOTEMPTY);
     }
     write_unlock(&child->ci_tags_lock);
-    
-    journal_cnode(child, UPDATE);
   } else {
     child = cnode_new_(name);
     if (!child) wr_release_return(&dir_cnode->ci_children_lock, -ENOSPC);
@@ -758,26 +725,23 @@ static int cinq_tag_with_(struct inode *dir, struct dentry *dentry,
     cnode_add_tag_(child, tag);
     cnode_add_child_(dir_cnode, child);
     write_unlock(&dir_cnode->ci_children_lock);
-    
-    journal_cnode(child, CREATE);
-    journal_cnode(dir_cnode, UPDATE);
   }
   return 0;
 }
 
 int cinq_link(struct dentry *old_dentry, struct inode *dir,
               struct dentry *dentry) {
-	struct inode *inode = old_dentry->d_inode;
+  struct inode *inode = old_dentry->d_inode;
   if (unlikely(!inode)) {
     DEBUG_("[Error@cinq_link] link to invalid dentry without inode: %s.\n",
            old_dentry->d_name.name);
     return -EINVAL;
   }
   
-	inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
+  inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
   inc_nlink(inode);
   ihold(inode);
-	
+
   dentry->d_fsdata = dentry->d_parent->d_fsdata;
   int err = cinq_tag_with_(dir, dentry, inode);
   if (!err) {
@@ -791,7 +755,7 @@ int cinq_link(struct dentry *old_dentry, struct inode *dir,
   
   drop_nlink(inode); // cancel inc_nlink(inode)
   iput(inode); // cancel ihold(inode)
-	return err;
+  return err;
 }
 
 // Note that this parameter dentry should be an existing valid one,
@@ -895,18 +859,16 @@ int cinq_rename(struct inode *old_dir, struct dentry *old_dentry,
 
 static inline int cinq_setsize_(struct inode *inode, loff_t newsize) {
 
-	if (!(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) ||
-        S_ISLNK(inode->i_mode)))
-		return -EINVAL;
-	if (i_tag(inode)->t_symname)
-		return -EINVAL;
+  if (!(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) ||
+      S_ISLNK(inode->i_mode)))
+    return -EINVAL;
+  if (i_tag(inode)->t_symname)
+    return -EINVAL;
   
   inode->i_size = newsize;
-	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
-	
-  journal_inode(inode, UPDATE);
+  inode->i_mtime = inode->i_ctime = CURRENT_TIME;
 
-	return 0;
+  return 0;
 }
 
 int cinq_setattr(struct dentry *dentry, struct iattr *attr) {
