@@ -160,8 +160,8 @@ static inline u64 hash_64(u64 val, unsigned int bits)
 /* Kernel (exchangable) */
 
 #ifdef CINQ_DEBUG
-#define DEBUG_ON_(cond, ...) if (unlikely(cond)) { printk(KERN_DEBUG __VA_ARGS__); }
-#define DEBUG_(...) (printk(KERN_DEBUG __VA_ARGS__))
+#define DEBUG_ON_(cond, ...) if (unlikely(cond)) { printk(__VA_ARGS__); }
+#define DEBUG_(...) (printk(__VA_ARGS__))
 #endif // CINQ_DEBUG
 
 #define malloc(n) kmalloc(n, GFP_KERNEL)

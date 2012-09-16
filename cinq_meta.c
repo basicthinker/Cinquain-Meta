@@ -51,7 +51,7 @@ const struct inode_operations cinq_dir_inode_operations = {
 };
 
 const struct inode_operations cinq_file_inode_operations = {
-	.setattr	= cinq_setattr,
+  .setattr	= cinq_setattr,
   .getattr  = simple_getattr
 };
 
@@ -62,8 +62,8 @@ const struct inode_operations cinq_symlink_inode_operations = {
 };
 
 const struct file_operations cinq_file_operations = {
-	.read     = cinq_file_read,
-	.write		= cinq_file_write,
+  .read     = cinq_file_read,
+  .write		= cinq_file_write,
   .fsync    = noop_fsync,
   .llseek   = generic_file_llseek
 };
@@ -72,7 +72,7 @@ const struct file_operations cinq_file_operations = {
 const struct file_operations cinq_dir_operations = {
   .open     = cinq_dir_open,
   .release  = cinq_dir_release,
-  //  .llseek   = cinq_dir_llseek,
+  .llseek   = cinq_dir_lseek,
   .readdir  = cinq_readdir,
   
   .read     = generic_read_dir,

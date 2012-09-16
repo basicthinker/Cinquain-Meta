@@ -486,8 +486,8 @@ static int cinq_mkinode_(struct inode *dir, struct dentry *dentry,
     cnode_add_tag_(child, tag);
     write_unlock(&child->ci_tags_lock);
   } else {
-    DEBUG_(">>> cinq_mkinode_(2): create cnode under %s by %s.\n",
-           parent->ci_name, req_fs->fs_name);
+    DEBUG_(">>> cinq_mkinode_(2): create %s under cnode %s by %s.\n",
+           name, parent->ci_name, req_fs->fs_name);
     child = cnode_new_(name);
     if (unlikely(!child)) wr_release_return(&parent->ci_children_lock, -ENOSPC);
     tag = tag_new_(req_fs, mode >> CINQ_MODE_SHIFT, inode);
@@ -506,7 +506,6 @@ static int cinq_mkinode_(struct inode *dir, struct dentry *dentry,
   // journal_inode(dir, UPDATE);
   
   local_inc_ref(dir, dentry);
-  DEBUG_("<<< cinq_mkinode_: increased local reference.\n");
   return 0;
 }
 
@@ -563,7 +562,7 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
     strncpy(namestr, (char *)dentry->d_name.name, dentry->d_name.len + 1);
     delim_pos = memchr(namestr, FS_DELIM, MAX_NAME_LEN + 1);
     if (unlikely(!delim_pos)) {
-      DEBUG_("[Error@cinq_mkdir] fs names NOT properly specified: %s\n",
+      DEBUG_("[Error@cinq_mkdir] FS view names NOT properly specified: %s\n",
              namestr);
       return -EINVAL;
     }
@@ -589,19 +588,18 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
   
     struct cinq_inode *dir_cnode = i_cnode(dir);
     if (!child_fs) { // makes new file system node
-      DEBUG_(">>> cinq_mkdir: to create fs %s under %s.\n", child_name,
+      DEBUG_(">>> cinq_mkdir: to create FS view %s under %s.\n", child_name,
              parent_fs == META_FS ? "META_FS" : parent_fs->fs_name);
       child_fs = fsnode_new(parent_fs, child_name);
       struct inode *iroot = cinq_get_inode_(dir, mode, 0);
       if (unlikely(!iroot)) {
-        DEBUG_("[Error@cinq_mkdir] failed to allocate root inode for fs %s.\n",
+        DEBUG_("[Error@cinq_mkdir] failed to allocate root inode for FS view %s.\n",
                child_fs->fs_name);
         return -ENOSPC;
       }
-      struct cinq_tag *tag = tag_new_(child_fs,
-                                      mode >> CINQ_MODE_SHIFT, iroot);
+      struct cinq_tag *tag = tag_new_(child_fs, mode >> CINQ_MODE_SHIFT, iroot);
       if (unlikely(!tag)) {
-        DEBUG_("[Error@cinq_mkdir] failed to allocate root tag for fs %s.\n",
+        DEBUG_("[Error@cinq_mkdir] failed to allocate root tag for FS view %s.\n",
                child_fs->fs_name);
         return -ENOSPC;
       }
@@ -613,10 +611,10 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
       dentry->d_fsdata = child_fs;
       dir->i_mtime = dir->i_ctime = CURRENT_TIME;
       
-      DEBUG_("<<< cinq_mkdir: created root dentry name %s, inode at %p.\n",
-             dentry->d_name.name, dentry->d_inode);
+      DEBUG_("<<< cinq_mkdir: created root dentry %s(%p) for inode %lx.\n",
+             dentry->d_name.name, dentry, dentry->d_inode->i_ino);
     } else { // make inheritance
-      DEBUG_(">>> cinq_mkdir: move fs %s to %s.\n", child_fs->fs_name,
+      DEBUG_(">>> cinq_mkdir: move FS view %s to %s.\n", child_fs->fs_name,
              parent_fs == META_FS ? "META_FS" : parent_fs->fs_name);
       if (child_fs->fs_parent != parent_fs) {
         fsnode_move(child_fs, parent_fs);
@@ -631,13 +629,14 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
           dentry->d_name.name, dir->i_ino);
    return -EINVAL;
   }
-  // journal_inode(dir, UPDATE);
-  DEBUG_("<<< cinq_mkdir: new dir %s under %s by %s.\n",
-         dentry->d_name.name, i_cnode(dir)->ci_name,
+
+  DEBUG_("<<< cinq_mkdir: new dir %s under %s(%lx) by %s.\n",
+         dentry->d_name.name, i_cnode(dir)->ci_name, dir->i_ino,
          ((struct cinq_fsnode *)dentry->d_fsdata)->fs_name);
   return cinq_mkinode_(dir, dentry, mode, NULL, 0);
 }
 
+// Looking up a directory or file
 static inline struct inode *cinq_lookup_(const struct inode *dir,
                                          const char *name) {
   struct cinq_inode *parent = i_cnode(dir);
@@ -645,7 +644,7 @@ static inline struct inode *cinq_lookup_(const struct inode *dir,
 
   struct cinq_inode *child = cnode_find_child_syn(parent, name);
   if (unlikely(!child)) {
-    DEBUG_("[Info@cinq_lookup_] cnode is NOT found: %s under %s\n",
+    DEBUG_("[Info@cinq_lookup_] cnode is NOT found: %s under cnode %s\n",
            name, parent->ci_name);
     return NULL;
   }
@@ -670,23 +669,23 @@ struct dentry *cinq_lookup(struct inode *dir, struct dentry *dentry,
   
   struct inode *inode;
   if (inode_meta_root(dir)) {
-    DEBUG_(">>> cinq_lookup(1): to look up fs %s.\n", name);
+    DEBUG_(">>> cinq_lookup(1): to look up FS view %s.\n", name);
     struct cinq_fsnode *fs = cfs_find_syn(&file_systems, name);
     if (!fs) return NULL;
     inode = fs->fs_root->d_inode;
     dentry->d_fsdata = fs;
   } else {
-    DEBUG_(">>> cinq_lookup(2): to look up %s under %s.\n",
-           name, i_cnode(dir)->ci_name);
+    DEBUG_(">>> cinq_lookup(2): to look up %s under inode %lx on cnode %s.\n",
+           name, dir->i_ino, i_cnode(dir)->ci_name);
     inode = cinq_lookup_(dir, name);
     // pass the request ID on
     dentry->d_fsdata = nameidata ?
         nameidata->path.dentry->d_fsdata : dentry->d_parent->d_fsdata;
   }
   if (!inode) {
-    DEBUG_("<<< cinq_lookup: FAILED to locate %s under %s by fs %s.\n",
-           dentry->d_name.name, i_cnode(dir)->ci_name,
-           ((struct cinq_fsnode *)dentry->d_fsdata)->fs_name);
+    DEBUG_("<<< cinq_lookup: FAILED to locate %s under inode %lx by fs %s on cnode %s.\n",
+           dentry->d_name.name, dir->i_ino,
+           ((struct cinq_fsnode *)dentry->d_fsdata)->fs_name, i_cnode(dir)->ci_name);
     return NULL;
   }
   return d_splice_alias(inode, dentry);
@@ -767,7 +766,7 @@ int cinq_unlink(struct inode *dir, struct dentry *dentry) {
                                                   (char *)dentry->d_name.name);
   struct inode *inode = dentry->d_inode;
   if (unlikely(!inode)) {
-    DEBUG_("[Error@cinq_unlink] unlink invalid dentry without inode: %s.\n",
+    DEBUG_(KERN_ERR "[Error@cinq_unlink] unlink invalid dentry without inode: %s.\n",
            dentry->d_name.name);
     return -EINVAL;
   }

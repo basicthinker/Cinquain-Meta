@@ -97,32 +97,37 @@ ssize_t cinq_file_write(struct file *filp, const char *buf, size_t len,
 
 int cinq_dir_open(struct inode *inode, struct file *filp) {
   struct inode *dir = filp->f_dentry->d_inode;
-  if (unlikely(!dir)) {
+  struct cinq_inode *cnode;
+  if (likely(dir)) {
+	cnode = i_cnode(dir);
+  } else {
     DEBUG_("[Error@cinq_dir_open] meets null inode.");
     return -EINVAL;
   }
-  struct cinq_inode *cnode = i_cnode(dir);
-  
+
   if (unlikely(inode_meta_root(dir))) {
     struct cinq_tag *cur;
     read_lock(&cnode->ci_tags_lock);
     cur = filp->private_data = cnode->ci_tags;
-    if (cur) atomic_inc(&cur->t_count);
     read_unlock(&cnode->ci_tags_lock);
+    if (cur) atomic_inc(&cur->t_count); // prevents from being evicted
   } else {
     struct cinq_inode *cur;
     read_lock(&cnode->ci_children_lock);
     cur = filp->private_data = cnode->ci_children;
-    if (cur) atomic_inc(&cur->ci_count);
     read_unlock(&cnode->ci_children_lock);
+    if (cur) atomic_inc(&cur->ci_count); // prevents from being evicted
   }
   return 0;
 }
 
 int cinq_dir_release(struct inode * inode, struct file * filp) {
   struct inode *dir = filp->f_dentry->d_inode;
-  if (unlikely(!dir)) {
-    DEBUG_("[Error@cinq_dir_open] meets null inode.");
+  struct cinq_inode *cnode;
+  if (likely(dir)) {
+	cnode = i_cnode(dir);
+  } else {
+	DEBUG_("[Error@cinq_dir_open] meets null inode.");
     return -EINVAL;
   }
   if (unlikely(inode_meta_root(dir))) {
@@ -135,6 +140,64 @@ int cinq_dir_release(struct inode * inode, struct file * filp) {
   return 0;
 }
 
+loff_t cinq_dir_lseek(struct file *filp, loff_t offset, int origin) {
+  struct dentry *dentry = filp->f_path.dentry;
+  struct inode *inode = dentry->d_inode;
+  struct cinq_inode *cnode = i_cnode(inode);
+
+  mutex_lock(&dentry->d_inode->i_mutex);
+  switch (origin) {
+    case 1:
+  	  offset += filp->f_pos;
+    case 0:
+      if (offset >= 0) break;
+    default:
+      mutex_unlock(&dentry->d_inode->i_mutex);
+      return -EINVAL;
+  }
+  if (offset != filp->f_pos) {
+    filp->f_pos = offset;
+    if (filp->f_pos >= 2) {
+      loff_t n = filp->f_pos - 2;
+      if (unlikely(inode_meta_root(inode))) {
+    	struct cinq_tag *cur = filp->private_data;
+
+        read_lock(&cnode->ci_tags_lock);
+        if (cur) atomic_dec(&cur->t_count);
+        cur = cnode->ci_tags;
+        while (n && cur) {
+          if (cur->t_fs != META_FS) n--;
+          cur = cur->hh.next;
+        }
+        if (!cur) cur = cnode->ci_tags;
+        filp->private_data = cur;
+        atomic_inc(&cur->t_count);
+        read_unlock(&cnode->ci_tags_lock);
+      } else {
+    	struct inode *target;
+    	struct cinq_inode *cur = filp->private_data;
+
+    	read_lock(&cnode->ci_children_lock);
+    	if (cur) atomic_dec(&cur->ci_count);
+    	cur = cnode->ci_children;
+    	if (cur)
+    	while (n && cur) {
+    	  target = cnode_lookup_inode(cur, dentry->d_fsdata);
+    	  if (target) --n;
+          cur = cur->ci_child.next;
+    	}
+    	if (!cur) cur = cnode->ci_children;
+    	filp->private_data = cur;
+    	atomic_inc(&cur->ci_count);
+    	read_unlock(&cnode->ci_children_lock);
+      }
+	}
+  }
+  mutex_unlock(&dentry->d_inode->i_mutex);
+  DEBUG_("cinq_dir_lseek: for %d in dir %s by FS %s.\n",
+		  offset, cnode->ci_name, ((struct cinq_fsnode *)dentry->d_fsdata)->fs_name);
+  return offset;
+}
 
 /* Relationship between i_mode and the DT_xxx types */
 static inline unsigned char dt_type(struct inode *inode) {
@@ -149,7 +212,7 @@ static inline unsigned char dt_type(struct inode *inode) {
 )
 
 int cinq_readdir(struct file *filp, void *dirent, filldir_t filldir) {
-	struct dentry *dentry = filp->f_path.dentry;
+  struct dentry *dentry = filp->f_path.dentry;
   struct inode *inode = dentry->d_inode;
   struct cinq_inode *cnode = i_cnode(inode);
   char *name;
@@ -173,7 +236,7 @@ int cinq_readdir(struct file *filp, void *dirent, filldir_t filldir) {
         /* fallthrough */
       default:
         read_lock(&cnode->ci_tags_lock);
-        if (filp->f_pos == 2) {
+        if (filp->f_pos == 2) { // atomic
           if (cursor) atomic_dec(&cursor->t_count);
           cursor = cnode->ci_tags;
           if (cursor) atomic_inc(&cursor->t_count);
@@ -211,12 +274,12 @@ int cinq_readdir(struct file *filp, void *dirent, filldir_t filldir) {
         /* fallthrough */
       default:
         read_lock(&cnode->ci_children_lock);
-        if (filp->f_pos == 2) {
-          if (cursor) atomic_dec(&cursor->ci_count);
-          cursor = cnode->ci_children;
-          if (cursor) atomic_inc(&cursor->ci_count);
-          filp->private_data = cursor;
-        }
+		if (filp->f_pos == 2) { // atomic
+		  if (cursor) atomic_dec(&cursor->ci_count);
+		  cursor = cnode->ci_children;
+		  if (cursor) atomic_inc(&cursor->ci_count);
+		  filp->private_data = cursor;
+		}
         for (; cursor != NULL; move_cursor(cursor, ci_count, ci_child)) {
           target = cnode_lookup_inode(cursor, dentry->d_fsdata);
           if (!target) continue;

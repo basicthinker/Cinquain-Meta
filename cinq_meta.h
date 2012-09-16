@@ -266,6 +266,8 @@ extern int cinq_dir_open(struct inode *inode, struct file *file);
 
 extern int cinq_dir_release(struct inode * inode, struct file * filp);
 
+extern loff_t cinq_dir_lseek(struct file *filp, loff_t offset, int origin);
+
 extern int cinq_readdir (struct file * filp, void * dirent, filldir_t filldir);
 
 extern int cinq_dir_release(struct inode * inode, struct file * filp);
@@ -320,22 +322,28 @@ static int cinq_match(struct inode *ino, void *vfh) {
 static struct dentry *cinq_fh_to_dentry(struct super_block *sb,
                                         struct fid *fid, int fh_len,
                                         int fh_type) {
-	struct inode *inode;
-	struct dentry *dentry = NULL;
-	u64 inum = fid->raw[2];
-	inum = (inum << 32) | fid->raw[1];
+  struct inode *inode;
+  struct dentry *dentry = NULL;
+  u64 inum = fid->raw[2];
+  inum = (inum << 32) | fid->raw[1];
+
+  if (fh_len < 3) return NULL;
   
-	if (fh_len < 3)
-		return NULL;
-  
-//  inode = cinq_iget(NULL, inum); 
-	inode = ilookup5(sb, (unsigned long)(inum + fid->raw[0]),
+// inode = cinq_iget(NULL, inum);
+  inode = ilookup5(sb, (unsigned long)(inum + fid->raw[0]),
                    cinq_match, fid->raw);
-	if (inode) {
-		dentry = d_find_alias(inode);
-		iput(inode);
-	} 
-  if (!dentry) printk(KERN_ERR "cinq_fh_to_dentry: NOT found dentry.");
+  if (inode) {
+	dentry = d_find_alias(inode);
+	iput(inode);
+  } else DEBUG_(KERN_ERR "cinq_fh_to_dentry: NOT found inode for fid '%x-%x-%x'.\n",
+		  	  	fid->raw[2], fid->raw[1], fid->raw[0]);
+
+  if(!dentry) DEBUG_(KERN_ERR "cinq_fh_to_dentry: NOT found dentry for fid '%x-%x-%x'.\n",
+			  fid->raw[2], fid->raw[1], fid->raw[0]);
+  else DEBUG_("cinq_fh_to_dentry: handle '%x-%x-%x' to dentry '%s' (%p) by '%s'.\n",
+		      fid->raw[2], fid->raw[1], fid->raw[0], dentry->d_name.name, dentry,
+			  ((struct cinq_fsnode *)dentry->d_fsdata)->fs_name);
+
   return dentry;
 }
 
@@ -365,6 +373,10 @@ static int cinq_encode_fh(struct dentry *dentry, __u32 *fh, int *len,
 	fh[2] = ((__u64)inode->i_ino) >> 32;
   
 	*len = 3;
+	DEBUG_("cinq_encode_fh: dentry %s (%p) by '%s' to handle '%x-%x-%x'.\n",
+			dentry->d_name.name, dentry,
+			((struct cinq_fsnode *)dentry->d_fsdata)->fs_name,
+			fh[2], fh[1], fh[0]);
 	return 1;
 }
 
