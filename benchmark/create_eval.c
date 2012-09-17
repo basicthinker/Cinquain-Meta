@@ -69,12 +69,12 @@ int traverse(char *path, const int fanout, const int file_cnt,
   return tran_cnt;
 } 
 
-void open(char *file) {
-  FILE *fp = fopen(file, "r");
+void create(char *file) {
+  FILE *fp = fopen(file, "w+");
   if (fp) {
     fclose(fp);
   } else {
-    fprintf(stderr, "Failed to open %s\n", file);
+    fprintf(stderr, "Failed to create %s\n", file);
   }
 }
 
@@ -99,7 +99,7 @@ int main(int argc, char *argv[]) {
 
   long begin, end;
   begin = clock();
-  long tran_cnt = traverse(path, fanout, file_cnt, open);
+  long tran_cnt = traverse(path, fanout, file_cnt, create);
   end = clock();
 
   double sec = (double)(end - begin) / CLOCKS_PER_SEC;
