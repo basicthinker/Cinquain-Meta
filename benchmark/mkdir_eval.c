@@ -80,7 +80,10 @@ int main(int argc, char *argv[]) {
   end = clock();
 
   double sec = (double)(end - begin) / CLOCKS_PER_SEC;
+  fprintf(stdout, "# Evaluation of mkdir()\n");
   fprintf(stdout, "# Transaction Count # Time (s) # Transactions per Second\n");
   fprintf(stdout, "%ld\t%.2f\t%.2f\n", tran_cnt, sec, (double)tran_cnt / sec);
+  return 0;
 }
+
 

@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
+#include <sys/time.h>
 #include <sys/stat.h>
 
 #define MAX_LEN 128
@@ -78,33 +78,69 @@ void create(char *file) {
   }
 }
 
+void open(char *file) {
+  FILE *fp = fopen(file, "r");
+  if (fp) {
+    fclose(fp);
+  } else {
+    fprintf(stderr, "Failed to open %s\n", file);
+  }
+}
+
+void rm(char *file) {
+  if (remove(file) == -1) {
+    fprintf(stderr, "Error on removing %s\n", file);
+  }
+}
+
 int main(int argc, char *argv[]) {
-  if (argc != 4) {
-    printf("Usage: ./open_eval [path] [fanout] [file count]\n");
+  if (argc != 5) {
+    printf("Usage: ./file_eval [operation] [path] [fanout] [file count]\n");
     return -1;
   }
 
-  const int file_cnt = atoi(argv[3]);
-  const int fanout = atoi(argv[2]);
+  const char op = argv[1][1];
+  const int file_cnt = atoi(argv[4]);
+  const int fanout = atoi(argv[3]);
   if (fanout > 9 || file_cnt > 9) {
     printf("Too large fanout or file count: %d or %d > 9.\n",
         fanout, file_cnt);
     return -1;
   }
-  const char *prefix = argv[1];
+  const char *prefix = argv[2];
   g_offset = strlen(prefix);
+
+  void (*visit)(char *file);
+  char *op_str;
+  switch (op) {
+    case 'c':
+      visit = create;
+      op_str = "create()";
+      break;
+    case 'o':
+      visit = open;
+      op_str = "open()";
+      break;
+    case 'r':
+      visit = rm;
+      op_str = "rm()";
+      break;
+    default:
+      fprintf(stderr, "Invalid requested operation on files.\n");
+  }
 
   char path[MAX_LEN];
   strcpy(path, prefix);
 
-  long begin, end;
-  begin = clock();
-  long tran_cnt = traverse(path, fanout, file_cnt, create);
-  end = clock();
+  struct timeval begin, end;
+  gettimeofday(&begin, NULL);
+  long tran_cnt = traverse(path, fanout, file_cnt, visit);
+  gettimeofday(&end, NULL);
 
-  double sec = (double)(end - begin) / CLOCKS_PER_SEC;
+  double sec = end.tv_sec - begin.tv_sec + (double)(end.tv_usec - begin.tv_usec) / 1000000;
+  fprintf(stdout, "Evaluation of %s\n", op_str);
   fprintf(stdout, "# Transaction Count # Time (s) # Transactions per Second\n");
-  fprintf(stdout, "%ld\t%.2f\t%.2f\n", tran_cnt, sec, (double)tran_cnt / sec);
+  fprintf(stdout, "%ld\t%.2f\t%.2f\n", tran_cnt, sec, tran_cnt / sec);
   return 0;
 }
 
