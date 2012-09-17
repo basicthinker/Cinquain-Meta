@@ -1,11 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <sys/stat.h>
 
 #define MAX_LEN 128
 
 int g_offset = 0;
+long tran_cnt = 0;
 
 inline void write_path(char *path, int depth, int value) {
   path[g_offset + 2 * depth] = '/';
@@ -29,8 +31,8 @@ inline void end_path(char *path, int depth) {
 }
 
 int main(int argc, char *argv[]) {
-  if (argc != 4) {
-    printf("Usage: ./meta_eval [path] [fanout] [num_loops]\n");
+  if (argc != 3) {
+    printf("Usage: ./mkdir_eval [path] [fanout]\n");
     return -1;
   }
 
@@ -39,7 +41,6 @@ int main(int argc, char *argv[]) {
     printf("Too large fanout: %d > 9.\n", fanout);
     return -1;
   }
-  int n_loops = atoi(argv[3]);
   char *prefix = argv[1];
   g_offset = strlen(prefix);
 
@@ -49,12 +50,16 @@ int main(int argc, char *argv[]) {
   int depth = 0;
   write_path(path, depth, 0);
 
+  long begin, end;
+  begin = clock();
   while (depth < fanout) {
     end_path(path, depth);
+    // Transaction executes.
     if (mkdir(path, 0755) != 0) {
       fprintf(stderr, "Error: creating dir %s.\n", path);
       return -1;
     }
+    ++tran_cnt;
     inc_path(path, 0);
     int cur, i;
     for (i = 0; i < depth; ++i) {
@@ -72,5 +77,10 @@ int main(int argc, char *argv[]) {
       write_path(path, depth, 0);
     }
   }
+  end = clock();
+
+  double sec = (double)(end - begin) / CLOCKS_PER_SEC;
+  fprintf(stdout, "# Transaction Count # Time (s) # Transactions per Second\n");
+  fprintf(stdout, "%ld\t%.2f\t%.2f\n", tran_cnt, sec, (double)tran_cnt / sec);
 }
 

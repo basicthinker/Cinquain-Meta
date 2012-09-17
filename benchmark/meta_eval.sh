@@ -4,10 +4,17 @@ PATH_PRE='/mnt/vm'
 VM_CNT=4
 
 FANOUT=5
-REPEAT=1
+REPEAT=2
 
-for (( i=0; i<$VM_CNT; ++i ))
+for ((r=0; r<$REPEAT; ++r))
 do
-  ./meta_eval "$PATH_PRE$i" $FANOUT $REPEAT &
+
+  # Evaluate mkdir
+  for (( i=0; i<$VM_CNT; ++i ))
+  do
+    ./mkdir_eval.o "$PATH_PRE$i" $FANOUT &
+  done
+  wait
+
 done
-wait
+
