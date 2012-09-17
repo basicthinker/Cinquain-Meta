@@ -29,38 +29,27 @@ inline void end_path(char *path, int depth) {
   path[g_offset + 2 * depth + 2] = '\0';
 }
 
-int main(int argc, char *argv[]) {
-  if (argc != 3) {
-    fprintf(stdout, "Usage: ./mkdir_eval [path] [fanout]\n");
-    return -1;
-  }
-
-  int fanout = atoi(argv[2]);
-  if (fanout > 9) {
-    fprintf(stderr, "Too large fanout: %d > 9.\n", fanout);
-    return -1;
-  }
-  char *prefix = argv[1];
-  g_offset = strlen(prefix);
-
-  char path[MAX_LEN];
-  strcpy(path, prefix);
-
+int traverse(char *path, const int fanout, const int file_cnt,
+    void (*visit)(char *file)) {
+  long tran_cnt = 0;
   int depth = 0;
   write_path(path, depth, 0);
 
-  long tran_cnt = 0;
-  long begin, end;
-  begin = clock();
   while (depth < fanout) {
     end_path(path, depth);
     // Transaction executes.
-    if (mkdir(path, 0755) != 0) {
-      fprintf(stderr, "Error: creating dir %s.\n", path);
-      return -1;
+    write_path(path, depth + 1, 54); // 'f'
+    write_path(path, depth + 2, 54); // 'f'
+    end_path(path, depth + 2);
+    int f;
+    for (f = 0; f < file_cnt; ++f) {
+      path[g_offset + depth * 2 + 4] = '0' + f;
+      visit(path); 
+      ++tran_cnt;
     }
-    ++tran_cnt;
+    end_path(path, depth); // recover
     inc_path(path, 0);
+
     int cur, i;
     for (i = 0; i < depth; ++i) {
       cur = read_path(path, i);
@@ -77,6 +66,35 @@ int main(int argc, char *argv[]) {
       write_path(path, depth, 0);
     }
   }
+  return tran_cnt;
+} 
+
+void print(char *path) {
+  fprintf(stdout, "%s\n", path);
+}
+
+int main(int argc, char *argv[]) {
+  if (argc != 4) {
+    printf("Usage: ./open_eval [path] [fanout] [file count]\n");
+    return -1;
+  }
+
+  const int file_cnt = atoi(argv[3]);
+  const int fanout = atoi(argv[2]);
+  if (fanout > 9 || file_cnt > 9) {
+    printf("Too large fanout or file count: %d or %d > 9.\n",
+        fanout, file_cnt);
+    return -1;
+  }
+  const char *prefix = argv[1];
+  g_offset = strlen(prefix);
+
+  char path[MAX_LEN];
+  strcpy(path, prefix);
+
+  long begin, end;
+  begin = clock();
+  long tran_cnt = traverse(path, fanout, file_cnt, print);
   end = clock();
 
   double sec = (double)(end - begin) / CLOCKS_PER_SEC;
