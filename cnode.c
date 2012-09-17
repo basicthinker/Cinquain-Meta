@@ -235,17 +235,18 @@ static inline void cnode_rm_child_syn(struct cinq_inode *parent, struct cinq_ino
   write_unlock(&parent->ci_children_lock);
 }
 
-struct inode *cnode_lookup_inode(struct cinq_inode *cnode, struct cinq_fsnode *fs) {
+struct inode *cnode_lookup_inode(struct cinq_inode *cnode, struct cinq_fsnode *req_fs) {
   struct cinq_tag *tag;
   read_lock(&cnode->ci_tags_lock);
+  struct cinq_fsnode *fs = req_fs;
   foreach_ancestor_tag(fs, tag, cnode) {
     if (tag) {
       rd_release_return(&cnode->ci_tags_lock, tag->t_inode);
     }
   }
   read_unlock(&cnode->ci_tags_lock);
-  DEBUG_("cnode_lookup_inode: failed to find tag by %s on %s.\n",
-         fs->fs_name, cnode->ci_name);
+  DEBUG_("cnode_lookup_inode: failed to find tag of FS '%s' on %s.\n",
+         req_fs->fs_name, cnode->ci_name);
   return NULL;
 }
 
@@ -486,8 +487,6 @@ static int cinq_mkinode_(struct inode *dir, struct dentry *dentry,
     cnode_add_tag_(child, tag);
     write_unlock(&child->ci_tags_lock);
   } else {
-    DEBUG_(">>> cinq_mkinode_(2): create %s under cnode %s by %s.\n",
-           name, parent->ci_name, req_fs->fs_name);
     child = cnode_new_(name);
     if (unlikely(!child)) wr_release_return(&parent->ci_children_lock, -ENOSPC);
     tag = tag_new_(req_fs, mode >> CINQ_MODE_SHIFT, inode);
@@ -498,12 +497,13 @@ static int cinq_mkinode_(struct inode *dir, struct dentry *dentry,
     cnode_add_tag_(child, tag);
     cnode_add_child_(parent, child);
     write_unlock(&parent->ci_children_lock);
+    DEBUG_(">>> cinq_mkinode_(2): create %s under cnode %s by FS %s.\n",
+           child->ci_name, parent->ci_name, req_fs->fs_name);
   }
   
   d_instantiate(dentry, tag->t_inode);
   dget(dentry); // extra count to pin the dentry in core
   dir->i_mtime = dir->i_ctime = CURRENT_TIME;
-  // journal_inode(dir, UPDATE);
   
   local_inc_ref(dir, dentry);
   return 0;
@@ -608,11 +608,12 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
       d_instantiate(dentry, iroot);
       dget(dentry); // extra count to pin the dentry in core
       child_fs->fs_root = dentry;
-      dentry->d_fsdata = child_fs;
+      dentry->d_fsdata = child_fs; // source of request ID (1)
       dir->i_mtime = dir->i_ctime = CURRENT_TIME;
       
-      DEBUG_("<<< cinq_mkdir: created root dentry %s(%p) for inode %lx.\n",
-             dentry->d_name.name, dentry, dentry->d_inode->i_ino);
+      DEBUG_("<<< cinq_mkdir: created root dentry %s(%p) with root inode %lx "
+    		 "for FS view %s.\n",
+             dentry->d_name.name, dentry, dentry->d_inode->i_ino, child_name);
     } else { // make inheritance
       DEBUG_(">>> cinq_mkdir: move FS view %s to %s.\n", child_fs->fs_name,
              parent_fs == META_FS ? "META_FS" : parent_fs->fs_name);
@@ -623,15 +624,15 @@ int cinq_mkdir(struct inode *dir, struct dentry *dentry, int mode) {
     return 0;
   }
                
-  dentry->d_fsdata = dentry->d_parent->d_fsdata;
+  dentry->d_fsdata = dentry->d_parent->d_fsdata; // source of request ID (2)
   if (unlikely(!dentry->d_fsdata)) {
    DEBUG_("[Error@cinq_mkdir] null fsnode for %s under dir %lx.\n",
           dentry->d_name.name, dir->i_ino);
    return -EINVAL;
   }
 
-  DEBUG_("<<< cinq_mkdir: new dir %s under %s(%lx) by %s.\n",
-         dentry->d_name.name, i_cnode(dir)->ci_name, dir->i_ino,
+  DEBUG_("<<< cinq_mkdir: new dir %s under inode %lx on cnode %s by %s.\n",
+         dentry->d_name.name, dir->i_ino, i_cnode(dir)->ci_name,
          ((struct cinq_fsnode *)dentry->d_fsdata)->fs_name);
   return cinq_mkinode_(dir, dentry, mode, NULL, 0);
 }
@@ -675,17 +676,19 @@ struct dentry *cinq_lookup(struct inode *dir, struct dentry *dentry,
     inode = fs->fs_root->d_inode;
     dentry->d_fsdata = fs;
   } else {
-    DEBUG_(">>> cinq_lookup(2): to look up %s under inode %lx on cnode %s.\n",
-           name, dir->i_ino, i_cnode(dir)->ci_name);
+	// pass the request ID on
+	dentry->d_fsdata = nameidata ?
+	    nameidata->path.dentry->d_fsdata : dentry->d_parent->d_fsdata;
+    DEBUG_(">>> cinq_lookup(2): to look up %s by FS %s under inode %lx on cnode %s.\n",
+           name, ((struct cinq_fsnode *)dentry->d_fsdata)->fs_name,
+           dir->i_ino, i_cnode(dir)->ci_name);
     inode = cinq_lookup_(dir, name);
-    // pass the request ID on
-    dentry->d_fsdata = nameidata ?
-        nameidata->path.dentry->d_fsdata : dentry->d_parent->d_fsdata;
   }
+
   if (!inode) {
-    DEBUG_("<<< cinq_lookup: FAILED to locate %s under inode %lx by fs %s on cnode %s.\n",
-           dentry->d_name.name, dir->i_ino,
-           ((struct cinq_fsnode *)dentry->d_fsdata)->fs_name, i_cnode(dir)->ci_name);
+    DEBUG_("<<< cinq_lookup: FAILED to locate %s by FS %s under inode %lx on cnode %s.\n",
+           dentry->d_name.name, ((struct cinq_fsnode *)dentry->d_fsdata)->fs_name,
+           dir->i_ino, i_cnode(dir)->ci_name);
     return NULL;
   }
   return d_splice_alias(inode, dentry);

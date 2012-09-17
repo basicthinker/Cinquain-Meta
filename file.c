@@ -194,8 +194,9 @@ loff_t cinq_dir_lseek(struct file *filp, loff_t offset, int origin) {
 	}
   }
   mutex_unlock(&dentry->d_inode->i_mutex);
-  DEBUG_("cinq_dir_lseek: for %d in dir %s by FS %s.\n",
-		  offset, cnode->ci_name, ((struct cinq_fsnode *)dentry->d_fsdata)->fs_name);
+  DEBUG_("cinq_dir_lseek: for offset %d in dir %s (%p) by FS %s.\n",
+		  offset, cnode->ci_name, dentry,
+		  ((struct cinq_fsnode *)dentry->d_fsdata)->fs_name);
   return offset;
 }
 

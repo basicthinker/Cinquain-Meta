@@ -340,7 +340,7 @@ static struct dentry *cinq_fh_to_dentry(struct super_block *sb,
 
   if(!dentry) DEBUG_(KERN_ERR "cinq_fh_to_dentry: NOT found dentry for fid '%x-%x-%x'.\n",
 			  fid->raw[2], fid->raw[1], fid->raw[0]);
-  else DEBUG_("cinq_fh_to_dentry: handle '%x-%x-%x' to dentry '%s' (%p) by '%s'.\n",
+  else DEBUG_("cinq_fh_to_dentry: handle '%x-%x-%x' ==> dentry '%s' (%p) by '%s'.\n",
 		      fid->raw[2], fid->raw[1], fid->raw[0], dentry->d_name.name, dentry,
 			  ((struct cinq_fsnode *)dentry->d_fsdata)->fs_name);
 
@@ -373,7 +373,7 @@ static int cinq_encode_fh(struct dentry *dentry, __u32 *fh, int *len,
 	fh[2] = ((__u64)inode->i_ino) >> 32;
   
 	*len = 3;
-	DEBUG_("cinq_encode_fh: dentry %s (%p) by '%s' to handle '%x-%x-%x'.\n",
+	DEBUG_("cinq_encode_fh: dentry %s (%p) by '%s' ==> handle '%x-%x-%x'.\n",
 			dentry->d_name.name, dentry,
 			((struct cinq_fsnode *)dentry->d_fsdata)->fs_name,
 			fh[2], fh[1], fh[0]);
