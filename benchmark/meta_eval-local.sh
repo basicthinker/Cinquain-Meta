@@ -1,7 +1,7 @@
 #! /bin/bash
 
 PATH_PRE='/mnt/vm'
-VM_CNT=4
+VM_CNT=3
 
 FANOUT=5
 FILECNT=5
@@ -34,6 +34,12 @@ do
   for (( i=0; i<$VM_CNT; ++i ))
   do
     ./file_eval.o -r "$PATH_PRE$i" $FANOUT $FILECNT &
+  done
+  wait
+
+  for (( i=0; i<$VM_CNT; ++i ))
+  do
+    time rm -r "$PATH_PRE$i/*" | awk ''  &
   done
   wait
 done
