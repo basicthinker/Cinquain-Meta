@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
+#include <sys/time.h>
 #include <sys/stat.h>
 
 #define MAX_LEN 128
@@ -50,8 +50,8 @@ int main(int argc, char *argv[]) {
   write_path(path, depth, 0);
 
   long tran_cnt = 0;
-  long begin, end;
-  begin = clock();
+  struct timeval begin, end;
+  gettimeofday(&begin, NULL);
   while (depth < fanout) {
     end_path(path, depth);
     // Transaction executes.
@@ -77,12 +77,12 @@ int main(int argc, char *argv[]) {
       write_path(path, depth, 0);
     }
   }
-  end = clock();
+  gettimeofday(&end, NULL);
 
-  double sec = (double)(end - begin) / CLOCKS_PER_SEC;
+  double sec = end.tv_sec - begin.tv_sec + (double)(end.tv_usec - begin.tv_usec) / 1000000;
   fprintf(stdout, "# Evaluation of mkdir()\n");
   fprintf(stdout, "# Transaction Count # Time (s) # Transactions per Second\n");
-  fprintf(stdout, "%ld\t%.2f\t%.2f\n", tran_cnt, sec, (double)tran_cnt / sec);
+  fprintf(stdout, "%ld\t%.2f\t%.2f\n", tran_cnt, sec, tran_cnt / sec);
   return 0;
 }
 

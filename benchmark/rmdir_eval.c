@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
+#include <sys/time.h>
 #include <sys/stat.h>
 
 #define MAX_LEN 128
@@ -54,16 +54,16 @@ int main(int argc, char *argv[]) {
   --depth;
   
   long tran_cnt = 0;
-  long begin, end;
-  begin = clock();
+  struct timeval begin, end;
+  gettimeofday(&begin, NULL);
   while (depth >= 0) {
     end_path(path, depth);
     // Transaction executes.
-    fprintf(stdout, "%s\n", path);
-//    if (mkdir(path, 0755) != 0) {
-//      fprintf(stderr, "Error: creating dir %s.\n", path);
-//      return -1;
-//    }
+    // fprintf(stdout, "%s\n", path);
+    if (rmdir(path) != 0) {
+      fprintf(stderr, "Error: creating dir %s.\n", path);
+      return -1;
+    }
     ++tran_cnt;
     int cur, i;
     for (i = 0; i <= depth; ++i) {
@@ -79,12 +79,12 @@ int main(int argc, char *argv[]) {
       --depth;
     }
   }
-  end = clock();
+  gettimeofday(&end, NULL);
 
-  double sec = (double)(end - begin) / CLOCKS_PER_SEC;
+  double sec = end.tv_sec - begin.tv_sec + (double)(end.tv_usec - begin.tv_usec) / 1000000;
   fprintf(stdout, "# Evaluation of rmdir()\n");
   fprintf(stdout, "# Transaction Count # Time (s) # Transactions per Second\n");
-  fprintf(stdout, "%ld\t%.2f\t%.2f\n", tran_cnt, sec, (double)tran_cnt / sec);
+  fprintf(stdout, "%ld\t%.2f\t%.2f\n", tran_cnt, sec, tran_cnt / sec);
   return 0;
 }
 
