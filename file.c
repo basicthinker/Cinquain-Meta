@@ -282,12 +282,15 @@ int cinq_readdir(struct file *filp, void *dirent, filldir_t filldir) {
 		  filp->private_data = cursor;
 		}
         for (; cursor != NULL; move_cursor(cursor, ci_count, ci_child)) {
+          DEBUG_("cinq_readdir: reach cnode %s with FS %s\n",
+        		  cursor->ci_name, ((struct cinq_fsnode *)dentry->d_fsdata)->fs_name);
           target = cnode_lookup_inode(cursor, dentry->d_fsdata);
           if (!target) continue;
           name = cursor->ci_name;
           if (filldir(dirent, name, strlen(name),
-                      filp->f_pos, target->i_ino, dt_type(target)) < 0)
-            return 0;
+                      filp->f_pos, target->i_ino, dt_type(target)) < 0) {
+        	rd_release_return(&cnode->ci_children_lock, 0);
+          }
           DEBUG_("cinq_readdir(2): filldir %s (%ld).\n", name, strlen(name));
           filp->f_pos++;
         }

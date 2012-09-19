@@ -196,6 +196,7 @@ static inline u64 hash_64(u64 val, unsigned int bits)
 
 #define META_FS ((void *)-EPERM)
 
+// Guarantee that lock release and return always happen together
 #define rd_release_return(lock_p, err) return (read_unlock(lock_p), err)
 #define wr_release_return(lock_p, err) return (write_unlock(lock_p), err)
 #define sp_release_return(lock_p, err) return (spin_unlock(lock_p), err)
