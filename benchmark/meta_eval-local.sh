@@ -5,7 +5,7 @@ VM_CNT=10
 
 FANOUT=6
 FILECNT=5
-REPEAT=1
+REPEAT=2
 
 for ((r=0; r<$REPEAT; ++r))
 do

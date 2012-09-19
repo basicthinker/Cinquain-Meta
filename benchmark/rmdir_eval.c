@@ -83,9 +83,9 @@ int main(int argc, char *argv[]) {
   gettimeofday(&end, NULL);
 
   double sec = end.tv_sec - begin.tv_sec + (double)(end.tv_usec - begin.tv_usec) / 1000000;
-  fprintf(stdout, "# Evaluation of rmdir()\n");
-  fprintf(stdout, "# Transaction Count # Time (s) # Transactions per Second\n");
-  fprintf(stdout, "%ld\t%.2f\t%.2f\n", tran_cnt, sec, tran_cnt / sec);
+  fprintf(stdout, "# Evaluation of rmdir()\n"
+         "# Transaction Count # Time (s) # Transactions per Second\n"
+         "%ld\t%.2f\t%.2f\n", tran_cnt, sec, tran_cnt / sec);
   return 0;
 }
 
