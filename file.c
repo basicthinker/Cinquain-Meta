@@ -282,7 +282,7 @@ int cinq_readdir(struct file *filp, void *dirent, filldir_t filldir) {
 		  filp->private_data = cursor;
 		}
         for (; cursor != NULL; move_cursor(cursor, ci_count, ci_child)) {
-          DEBUG_("cinq_readdir: reach cnode %s with FS %s\n",
+          DEBUG_("cinq_readdir: reach cnode %s (for FS %s)\n",
         		  cursor->ci_name, ((struct cinq_fsnode *)dentry->d_fsdata)->fs_name);
           target = cnode_lookup_inode(cursor, dentry->d_fsdata);
           if (!target) continue;
