@@ -144,7 +144,7 @@ static inline int negative(const struct cinq_tag *tag) {
 static inline struct inode *cinq_iget(struct super_block *sb,
                                       unsigned long int ino) {
   struct cinq_tag *tag = (struct cinq_tag *)ino;
-  return negative(tag) ? NULL : tag->t_inode;
+  return tag->t_inode;
 }
 
 static inline int impenetrable(const struct cinq_tag *tag,
@@ -312,36 +312,45 @@ static struct dentry *cinq_get_parent(struct dentry *child) {
 	return ERR_PTR(-ESTALE);
 }
 
-static int cinq_match(struct inode *ino, void *vfh) {
-	__u32 *fh = vfh;
-	__u64 inum = fh[2];
-	inum = (inum << 32) | fh[1];
-	return ino->i_ino == inum && fh[0] == ino->i_generation;
-}
-
 static struct dentry *cinq_fh_to_dentry(struct super_block *sb,
                                         struct fid *fid, int fh_len,
                                         int fh_type) {
   struct inode *inode;
   struct dentry *dentry = NULL;
-  u64 inum = fid->raw[2];
-  inum = (inum << 32) | fid->raw[1];
+  u64 inum, fs_id;
 
-  if (fh_len < 3) return NULL;
-  
-// inode = cinq_iget(NULL, inum);
-  inode = ilookup5(sb, (unsigned long)(inum + fid->raw[0]),
-                   cinq_match, fid->raw);
+  if (fh_len < 4) return NULL;
+
+  inum = fid->raw[3];
+  inum = (inum << 32) | fid->raw[2];
+  fs_id = fid->raw[1];
+  fs_id = (fs_id << 32) | fid->raw[0];
+
+  inode = cinq_iget(NULL, inum);
+
   if (inode) {
-	dentry = d_find_alias(inode);
-	iput(inode);
-  } else DEBUG_(KERN_ERR "cinq_fh_to_dentry: NOT found inode for fid '%x-%x-%x'.\n",
-		  	  	fid->raw[2], fid->raw[1], fid->raw[0]);
+	if (!list_empty(&inode->i_dentry)) {
+	  struct dentry *alias;
+      spin_lock(&inode->i_lock);
+      list_for_each_entry(alias, &inode->i_dentry, d_alias) {
+        spin_lock(&alias->d_lock);
+        if (alias->d_fsdata == (void *)fs_id) {
+          alias->d_count++;
+          dentry = alias;
+          spin_unlock(&alias->d_lock);
+          break;
+        }
+        spin_unlock(&alias->d_lock);
+      }
+      spin_unlock(&inode->i_lock);
+    }
+  } else DEBUG_(KERN_ERR "cinq_fh_to_dentry: NULL inode for fid '%x-%x-%x-%x'.\n",
+		  	  	fid->raw[3], fid->raw[2], fid->raw[1], fid->raw[0]);
 
   if(!dentry) DEBUG_(KERN_ERR "cinq_fh_to_dentry: NOT found dentry for fid '%x-%x-%x'.\n",
 			  fid->raw[2], fid->raw[1], fid->raw[0]);
-  else DEBUG_("cinq_fh_to_dentry: handle '%x-%x-%x' ==> dentry '%s' (%p) by '%s'.\n",
-		      fid->raw[2], fid->raw[1], fid->raw[0], dentry->d_name.name, dentry,
+  else DEBUG_("cinq_fh_to_dentry: handle '%x-%x-%x-%x' ==> dentry '%s' (%p) by '%s'.\n",
+		      fid->raw[3], fid->raw[2], fid->raw[1], fid->raw[0], dentry->d_name.name, dentry,
 			  ((struct cinq_fsnode *)dentry->d_fsdata)->fs_name);
 
   return dentry;
@@ -350,33 +359,21 @@ static struct dentry *cinq_fh_to_dentry(struct super_block *sb,
 static int cinq_encode_fh(struct dentry *dentry, __u32 *fh, int *len,
                           int connectable) {
 	struct inode *inode = dentry->d_inode;
+	struct cinq_fsnode *fs = dentry->d_fsdata;
   
-	if (*len < 3)
+	if (*len < 4)
 		return 255;
   
-	if (inode_unhashed(inode)) {
-		/* Unfortunately insert_inode_hash is not idempotent,
-		 * so as we hash inodes here rather than at creation
-		 * time, we need a lock to ensure we only try
-		 * to do it once
-		 */
-		static DEFINE_SPINLOCK(lock);
-		spin_lock(&lock);
-		if (inode_unhashed(inode))
-			__insert_inode_hash(inode,
-                          inode->i_ino + inode->i_generation);
-		spin_unlock(&lock);
-	}
+	fh[0] = fs->fs_id;
+	fh[1] = ((__u64)fs->fs_id) >> 32;
+	fh[2] = inode->i_ino;
+	fh[3] = ((__u64)inode->i_ino) >> 32;
   
-	fh[0] = inode->i_generation;
-	fh[1] = inode->i_ino;
-	fh[2] = ((__u64)inode->i_ino) >> 32;
-  
-	*len = 3;
-	DEBUG_("cinq_encode_fh: dentry %s (%p) by '%s' ==> handle '%x-%x-%x'.\n",
+	*len = 4;
+	DEBUG_("cinq_encode_fh: dentry %s (%p) by '%s' ==> handle '%x-%x-%x-%x'.\n",
 			dentry->d_name.name, dentry,
 			((struct cinq_fsnode *)dentry->d_fsdata)->fs_name,
-			fh[2], fh[1], fh[0]);
+			fh[3], fh[2], fh[1], fh[0]);
 	return 1;
 }
 

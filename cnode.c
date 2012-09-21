@@ -75,6 +75,19 @@ void cinq_destroy_inode(struct inode *inode) {
 
 }
 
+static inline void tag_init(struct cinq_tag *tag, const struct cinq_fsnode *fs,
+		const struct inode *inode, enum cinq_visibility mode) {
+  if (likely(tag)) {
+    tag->t_fs = (void *)fs;
+    tag->t_inode = (void *)inode;
+    tag->t_mode = mode;
+    tag->t_host = NULL;
+    atomic_set(&tag->t_nchild, 0);
+    atomic_set(&tag->t_count, 0);
+    tag->t_symname = NULL;
+  }
+}
+
 // creates a new tag without associating inode to it
 static inline struct cinq_tag *tag_new_with_(const struct cinq_fsnode *fs,
                                              enum cinq_visibility mode,
@@ -83,13 +96,7 @@ static inline struct cinq_tag *tag_new_with_(const struct cinq_fsnode *fs,
   if (unlikely(!tag)) {
     return NULL;
   }
-  tag->t_fs = (struct cinq_fsnode *)fs;
-  tag->t_inode = (void *)inode;
-  tag->t_mode = mode;
-  tag->t_host = NULL;
-  atomic_set(&tag->t_nchild, 0);
-  atomic_set(&tag->t_count, 0);
-  tag->t_symname = NULL;
+  tag_init(tag, fs, inode, mode);
   return tag;
 }
 
