@@ -30,6 +30,7 @@ static struct kmem_cache *vfs_inode_cachep;
     ((struct inode *)kmem_cache_alloc(vfs_inode_cachep, GFP_KERNEL))
 #define inode_free_(p) (kmem_cache_free(vfs_inode_cachep, p))
 
+/*
 #else
 
 #define cnode_malloc_() \
@@ -43,7 +44,7 @@ static struct kmem_cache *vfs_inode_cachep;
 #define inode_malloc_(void) \
     ((struct inode *)malloc(sizeof(struct inode)))
 #define inode_free_(p) (free(p))
-
+*/
 #endif // __KERNEL__
 
 static inline int cnode_is_root_(const struct cinq_inode *cnode) {
@@ -396,6 +397,7 @@ static inline void local_inc_ref(struct inode *dir, struct dentry *dentry) {
   }
 }
 
+// Reaching ci_tags_lock of parent cnode
 static inline void local_drop_ref(struct inode *dir, struct dentry *dentry) {
   struct cinq_tag *dir_tag = i_tag(dir), *tag;
   struct inode *inode = dentry->d_inode;
@@ -454,7 +456,7 @@ static int cinq_mkinode_(struct inode *dir, struct dentry *dentry,
   struct cinq_fsnode *req_fs = dentry->d_fsdata;
   
   char *name = (char *)dentry->d_name.name;
-  if (dentry->d_name.len > MAX_NAME_LEN) {
+  if (unlikely(dentry->d_name.len > MAX_NAME_LEN)) {
     DEBUG_("[Error@cinq_mkdir] name is too long: %s\n", name);
     return -ENAMETOOLONG;
   }
@@ -799,6 +801,7 @@ int cinq_unlink(struct inode *dir, struct dentry *dentry) {
     cnode_add_tag_(cnode, tag);
   } else if (tag->t_inode) { // delete existing one
     tag_drop_inode_(tag);
+    // locking order: chld->ci_tags_lock ==> parent->ci_tags_lock
     local_drop_ref(dir, dentry);
   } else {
     DEBUG_("[Warn@cinq_unlink] unlink null tag on %s by FS %s\n",
@@ -868,8 +871,8 @@ int cinq_rename(struct inode *old_dir, struct dentry *old_dentry,
 		  new_dentry->d_name.name, i_cnode(new_dir));
 
   if (new_inode && (new_tag = i_tag(new_inode), new_tag->t_fs == req_fs)) {
-    if (!cinq_empty_dir_(i_cnode(new_inode), req_fs)) {
-      DEBUG_("cinq_rename: move to existing inode %lx on cnode %s\n",
+    if (S_ISDIR(new_inode->i_mode) && !cinq_empty_dir_(i_cnode(new_inode), req_fs)) {
+      DEBUG_("cinq_rename: move to non-empty dir %lx on cnode %s\n",
           new_inode->i_ino, i_cnode(new_inode)->ci_name);
       return -ENOTEMPTY;
     }

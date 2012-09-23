@@ -10,19 +10,19 @@ FILECNT=5
 mkdir $MOUNT_PATH/META_FS.vmr
 for ((i=0;i<$CLIENT_CNT;++i))
 do
-  mkdir $MOUNT_PATH/vmr.vm$i
+  mkdir $MOUNT_PATH/vmr.c$i
   for ((j=0;j<2;++j))
   do
-    mkdir $MOUNT_PATH/vm$i.vm$i$j
+    mkdir $MOUNT_PATH/c$i.c$i-v$j
     for ((k=0;k<2;++k))
     do
-      mkdir $MOUNT_PATH/vm$i$j.vm$i$j$k
+      mkdir $MOUNT_PATH/c$i-v$j.c$i-v$j$k
       for ((l=0;l<2;++l))
       do
-        mkdir $MOUNT_PATH/vm$i$j$k.vm$i$j$k$l
+        mkdir $MOUNT_PATH/c$i-v$j$k.c$i-v$j$k$l
         for ((m=0;m<2;++m))
         do    
-          mkdir $MOUNT_PATH/vm$i$j$k$l.vm$i$j$k$l$m
+          mkdir $MOUNT_PATH/c$i-v$j$k$l.c$i-v$j$k$l$m
         done
       done
     done
