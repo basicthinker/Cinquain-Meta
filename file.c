@@ -28,11 +28,80 @@ static inline void cfp_set_value(struct fingerprint *fp, struct file *filp) {
 
 static inline void cfp_set_value(struct fingerprint *fp, struct file *filp) {
   memset(fp->value, 0, sizeof(fp->value));
-  u64 hash = hash_64(filp->f_path.dentry->d_inode->i_ino, 64);
+  u64 hash = hash_64((u64)filp->f_path.dentry->d_inode->i_ino, 64);
   *((unsigned long *)&fp->value) = hash;
 }
 
 #endif // SPNFS_
+
+struct dentry *cinq_fh_to_dentry(struct super_block *sb,
+                                 struct fid *fid, int fh_len,
+                                 int fh_type) {
+  struct inode *inode;
+  struct dentry *dentry = NULL;
+  u64 inum, fs_id;
+
+  if (fh_len < 4) return NULL;
+
+  inum = fid->raw[3];
+  inum = (inum << 32) | fid->raw[2];
+  fs_id = fid->raw[1];
+  fs_id = (fs_id << 32) | fid->raw[0];
+
+  inode = cinq_iget(NULL, inum);
+
+  if (inode) {
+	if (!list_empty(&inode->i_dentry)) {
+	  struct dentry *alias;
+      spin_lock(&inode->i_lock);
+      list_for_each_entry(alias, &inode->i_dentry, d_alias) {
+        spin_lock(&alias->d_lock);
+        if (alias->d_fsdata == (void *)fs_id) {
+          alias->d_count++;
+          dentry = alias;
+          spin_unlock(&alias->d_lock);
+          break;
+        }
+        spin_unlock(&alias->d_lock);
+      }
+      spin_unlock(&inode->i_lock);
+    }
+  } else DEBUG_(KERN_ERR "cinq_fh_to_dentry: NULL inode for fid '%x-%x-%x-%x'.\n",
+		  	  	fid->raw[3], fid->raw[2], fid->raw[1], fid->raw[0]);
+
+  if(!dentry) DEBUG_(KERN_ERR "cinq_fh_to_dentry: NOT found dentry for fid '%x-%x-%x-%x'.\n",
+			  fid->raw[3], fid->raw[2], fid->raw[1], fid->raw[0]);
+  else DEBUG_("cinq_fh_to_dentry: handle '%x-%x-%x-%x' ==> dentry '%s' (%p) by '%s'.\n",
+		      fid->raw[3], fid->raw[2], fid->raw[1], fid->raw[0], dentry->d_name.name, dentry,
+			  ((struct cinq_fsnode *)dentry->d_fsdata)->fs_name);
+
+  return dentry;
+}
+
+int cinq_encode_fh(struct dentry *dentry, __u32 *fh, int *len,
+                   int connectable) {
+	struct inode *inode = dentry->d_inode;
+	struct cinq_fsnode *fs = dentry->d_fsdata;
+
+	if (*len < 4)
+		return 255;
+
+	fh[0] = fs->fs_id;
+	fh[1] = ((__u64)fs->fs_id) >> 32;
+	fh[2] = inode->i_ino;
+	fh[3] = ((__u64)inode->i_ino) >> 32;
+
+	*len = 4;
+	DEBUG_("cinq_encode_fh: dentry %s (%p) by '%s' ==> handle '%x-%x-%x-%x'.\n",
+			dentry->d_name.name, dentry,
+			((struct cinq_fsnode *)dentry->d_fsdata)->fs_name,
+			fh[3], fh[2], fh[1], fh[0]);
+	return 1;
+}
+
+struct dentry *cinq_get_parent(struct dentry *child) {
+	return ERR_PTR(-ESTALE);
+}
 
 ssize_t cinq_file_read(struct file *filp, char *buf, size_t len, loff_t *ppos) {
   struct fingerprint fp;
@@ -194,9 +263,9 @@ loff_t cinq_dir_lseek(struct file *filp, loff_t offset, int origin) {
 	}
   }
   mutex_unlock(&dentry->d_inode->i_mutex);
-  DEBUG_("cinq_dir_lseek: for offset %d in dir %s (%p) by FS %s.\n",
-		  offset, cnode->ci_name, dentry,
-		  ((struct cinq_fsnode *)dentry->d_fsdata)->fs_name);
+  DEBUG_("cinq_dir_lseek: for offset %ld in dir %s (%p) by FS %s.\n",
+		 (long int)offset, cnode->ci_name, dentry,
+		 ((struct cinq_fsnode *)dentry->d_fsdata)->fs_name);
   return offset;
 }
 

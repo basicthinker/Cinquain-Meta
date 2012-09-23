@@ -87,6 +87,14 @@ const struct export_operations cinq_export_operations = {
 #endif
 };
 
+struct backing_dev_info cinq_backing_dev_info  __read_mostly = {
+	.ra_pages	= 0,	/* No readahead */
+	.capabilities	= BDI_CAP_NO_ACCT_AND_WRITEBACK | BDI_CAP_SWAP_BACKED,
+#ifdef __OLD_KERNEL__
+  .unplug_io_fn	= default_unplug_io_fn,
+#endif // __OLD_KERNEL__
+};
+
 #ifdef __KERNEL__
 
 struct kmem_cache *UT_hash_table_cachep;
