@@ -48,6 +48,7 @@ struct dentry *cinq_fh_to_dentry(struct super_block *sb,
   fs_id = (fs_id << 32) | fid->raw[0];
 
   dentry = (struct dentry *)daddr;
+  dget(dentry); // extra count to pin the dentry in core
   if(!dentry) DEBUG_(KERN_ERR "cinq_fh_to_dentry: NOT found dentry for fid '%x-%x-%x-%x'.\n",
 			  fid->raw[3], fid->raw[2], fid->raw[1], fid->raw[0]);
   else DEBUG_("cinq_fh_to_dentry: handle '%x-%x-%x-%x' ==> dentry '%s' by '%s'.\n",

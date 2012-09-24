@@ -502,7 +502,12 @@ static int cinq_mkinode_(struct inode *dir, struct dentry *dentry,
   }
   
   d_instantiate(dentry, tag->t_inode);
-  dget(dentry); // extra count to pin the dentry in core
+  // to pin the dentry in core
+  if (dentry) {
+    spin_lock(&dentry->d_lock);
+    dentry->d_count = 0x7fffffff;
+    spin_unlock(&dentry->d_lock);
+  }
   dir->i_mtime = dir->i_ctime = CURRENT_TIME;
   
   local_inc_ref(dir, dentry);
